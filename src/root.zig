@@ -2,6 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 const Val = @import("val.zig").Val;
 const Env = @import("env.zig").Env;
+const Compiler = @import("compiler.zig").Compiler;
 
 pub const VmOptions = struct {
     comptime stack_size: usize = 4096,
@@ -19,6 +20,15 @@ pub const Vm = struct {
         };
     }
 
+    pub fn evalStr(_: *Vm, str: []const u8) !Val {
+        var compiler = Compiler.init(str);
+        var ret = Val{ .void = {} };
+        while (try compiler.next()) |v| {
+            ret = v;
+        }
+        return ret;
+    }
+
     pub fn deinit(vm: *Vm) void {
         vm.options.allocator.free(vm.env.stack);
     }
@@ -27,4 +37,18 @@ pub const Vm = struct {
 test "can make vm" {
     var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
     defer vm.deinit();
+}
+
+test "eval constant returns constant" {
+    var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const actual = try vm.evalStr("12");
+    try std.testing.expectEqual(Val{ .int = 12 }, actual);
+}
+
+test "eval multiple constants returns last constant" {
+    var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const actual = try vm.evalStr("12 true false 4.5");
+    try std.testing.expectEqual(Val{ .float = 4.5 }, actual);
 }
