@@ -56,10 +56,11 @@ pub const Tokenizer = struct {
 
     pub fn toArray(self: *Tokenizer, allocator: std.mem.Allocator) ![]Token {
         var ret = std.ArrayListUnmanaged(Token){};
+        defer ret.deinit(allocator);
         while (self.next()) |token| {
             try ret.append(allocator, token);
         }
-        return try ret.toOwnedSlice(allocator);
+        return try allocator.dupe(Token, ret.items);
     }
 
     fn takeWhitespace(self: *Tokenizer) void {
