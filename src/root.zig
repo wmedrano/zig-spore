@@ -9,6 +9,12 @@ test "can make vm" {
     defer vm.deinit();
 }
 
+test "can run gc" {
+    var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
+    try vm.runGc();
+    defer vm.deinit();
+}
+
 test "eval constant returns constant" {
     var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
     defer vm.deinit();

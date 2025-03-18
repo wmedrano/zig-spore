@@ -61,7 +61,7 @@ fn ownedSliceToVal(vm: *Vm, slice: []Val) !Val {
     const list = ListVal{
         .list = slice,
     };
-    const id = try vm.env.objects.lists.put(vm.allocator(), list);
+    const id = try vm.env.objects.putList(vm.allocator(), list);
     return Val{ .list = id };
 }
 

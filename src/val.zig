@@ -8,6 +8,13 @@ pub const FunctionError = error{ WrongArity, WrongType } || std.mem.Allocator.Er
 
 pub const ListVal = struct {
     list: []Val,
+
+    pub fn garbageCollect(self: *ListVal, allocator: std.mem.Allocator) void {
+        if (self.list.len > 0) {
+            allocator.free(self.list);
+            self.list = &[0]Val{};
+        }
+    }
 };
 
 pub const FunctionVal = struct {

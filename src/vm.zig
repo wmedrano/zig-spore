@@ -80,6 +80,17 @@ pub const Vm = struct {
         self.env.deinit(self.options.allocator);
     }
 
+    pub fn runGc(self: *Vm) !void {
+        for (self.env.stack[0..self.env.stack_len]) |v| {
+            self.env.objects.markReachable(v);
+        }
+        var globalsIter = self.env.global.values.valueIterator();
+        while (globalsIter.next()) |v| {
+            self.env.objects.markReachable(v.*);
+        }
+        try self.env.objects.sweepUnreachable(self.allocator());
+    }
+
     fn run(self: *Vm) !Val {
         var return_value = Val{ .void = {} };
         while (self.env.nextInstruction()) |instruction| {
