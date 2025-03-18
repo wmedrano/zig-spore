@@ -21,7 +21,7 @@ pub const SymbolTable = struct {
             return v;
         }
         const name = try allocator.dupe(u8, str);
-        const id = Symbol{ .id = self.size() };
+        const id = Symbol{ .id = @intCast(self.size()) };
         try self.symbols.append(allocator, name);
         try self.name_to_symbol.put(allocator, name, id);
         return id;

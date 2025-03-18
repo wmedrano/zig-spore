@@ -4,7 +4,7 @@ const TokenType = @import("tokenizer.zig").TokenType;
 const Token = @import("tokenizer.zig").Token;
 const Val = @import("val.zig").Val;
 const ListVal = @import("val.zig").ListVal;
-const Vm = @import("root.zig").Vm;
+const Vm = @import("vm.zig").Vm;
 
 pub const Ast = struct {
     ast: Val,

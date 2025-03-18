@@ -5,7 +5,7 @@ const TokenType = @import("tokenizer.zig").TokenType;
 const Token = @import("tokenizer.zig").Token;
 const Val = @import("val.zig").Val;
 const ListVal = @import("val.zig").ListVal;
-const Vm = @import("root.zig").Vm;
+const Vm = @import("vm.zig").Vm;
 const Instruction = @import("instruction.zig").Instruction;
 const Ast = @import("ast.zig").Ast;
 
@@ -21,7 +21,7 @@ pub const Compiler = struct {
     }
 
     pub fn deinit(self: *Compiler) void {
-        self.instructions.deinit(self.vm.allocator());
+        self.instructions.deinit(self.allocator());
     }
 
     pub fn currentExpr(self: *Compiler) []Instruction {
@@ -38,6 +38,21 @@ pub const Compiler = struct {
             .list => |list| {
                 const slice = self.vm.env.objects.lists.get(list);
                 try self.compileTree(slice.?.list);
+            },
+            .symbol => |symbol| {
+                const identifier = self.vm.env.objects.symbols.symbolToStr(symbol).?;
+                if (identifier.len > 0 and identifier[0] == '\'') {
+                    const unquoted_identifier = identifier[1..];
+                    const v = Val{
+                        .symbol = try self.vm.env.objects.symbols.strToSymbol(self.allocator(), unquoted_identifier),
+                    };
+                    try self.instructions.append(
+                        self.allocator(),
+                        Instruction{ .push = v },
+                    );
+                } else {
+                    try self.instructions.append(self.allocator(), Instruction{ .deref = symbol });
+                }
             },
             else => try self.instructions.append(
                 self.allocator(),

@@ -1,9 +1,11 @@
 const std = @import("std");
-const Val = @import("val.zig").Val;
 const Instruction = @import("instruction.zig").Instruction;
+const Module = @import("module.zig").Module;
 const ObjectManager = @import("object_manager.zig").ObjectManager;
+const Val = @import("val.zig").Val;
 
 pub const Env = struct {
+    global: Module,
     objects: ObjectManager,
     stack: []Val,
     stack_len: usize,
@@ -11,6 +13,7 @@ pub const Env = struct {
 
     pub fn init(allocator: std.mem.Allocator, stack_size: usize) !Env {
         return Env{
+            .global = .{},
             .objects = .{},
             .stack = try allocator.alloc(Val, stack_size),
             .stack_len = 0,
@@ -22,6 +25,7 @@ pub const Env = struct {
         self.objects.deinit(allocator);
         allocator.free(self.stack);
         self.stack_frames.deinit(allocator);
+        self.global.deinit(allocator);
     }
 
     pub fn pushVal(self: *Env, val: Val) !void {
@@ -40,9 +44,18 @@ pub const Env = struct {
         return self.stack[self.stack_len - 1];
     }
 
+    pub fn localStack(self: *const Env) []const Val {
+        const stack_start = if (self.stack_frames.getLastOrNull()) |sf| sf.stack_start else return &[0]Val{};
+        return self.stack[stack_start..self.stack_len];
+    }
+
     pub fn resetStacks(self: *Env) void {
         self.stack_len = 0;
         self.stack_frames.clearRetainingCapacity();
+    }
+
+    pub fn pushStackFrame(self: *Env, allocator: std.mem.Allocator, stack_frame: StackFrame) !void {
+        try self.stack_frames.append(allocator, stack_frame);
     }
 
     pub fn popStackFrame(self: *Env) !Val {
@@ -68,8 +81,8 @@ pub const Env = struct {
 
 pub const StackFrame = struct {
     instructions: []const Instruction,
-    stack_start: usize = 0,
-    next_instruction: usize = 0,
+    stack_start: usize,
+    next_instruction: usize,
 
     fn isDone(self: *const StackFrame) bool {
         const ok = self.next_instruction < self.instructions.len;
