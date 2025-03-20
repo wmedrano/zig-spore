@@ -17,6 +17,7 @@ pub const Compiler = struct {
     vm: *Vm,
     instructions: std.ArrayListUnmanaged(Instruction),
     def_symbol: Symbol,
+    defun_symbol: Symbol,
     lambda_symbol: Symbol,
 
     pub fn init(vm: *Vm) !Compiler {
@@ -24,6 +25,7 @@ pub const Compiler = struct {
             .vm = vm,
             .instructions = .{},
             .def_symbol = (try vm.newSymbol("def")),
+            .defun_symbol = (try vm.newSymbol("defun")),
             .lambda_symbol = (try vm.newSymbol("lambda")),
         };
     }
@@ -63,6 +65,10 @@ pub const Compiler = struct {
             ret = v;
             didReplace = true;
         }
+        if (try self.macroExpandDefun(ret)) |v| {
+            ret = v;
+            didReplace = true;
+        }
         if (didReplace) return ret else return null;
     }
 
@@ -86,6 +92,50 @@ pub const Compiler = struct {
             );
             expandedExpr = null;
             return list_val.toVal();
+        }
+        return null;
+    }
+
+    fn macroExpandDefun(self: *Compiler, ast: Val) !?Val {
+        const expr = if (ast.asList(self.vm)) |list| list.list else return null;
+        if (expr.len == 0) {
+            return null;
+        }
+        const leading_symbol = if (expr[0].asSymbol()) |x| x else return null;
+        if (leading_symbol.eql(self.defun_symbol)) {
+            if (expr.len < 4) {
+                return CompileError.BadDefine;
+            }
+            const name = if (expr[1].asSymbol()) |s| s else return CompileError.BadDefine;
+            const args = expr[2];
+            const body = expr[3..];
+            var lambda_expr = try std.ArrayListUnmanaged(Val).initCapacity(
+                self.allocator(),
+                2 + body.len,
+            );
+            defer lambda_expr.deinit(self.allocator());
+            lambda_expr.appendAssumeCapacity(self.lambda_symbol.toVal());
+            lambda_expr.appendAssumeCapacity(args);
+            lambda_expr.appendSliceAssumeCapacity(body);
+            const lambda_expr_val = try self.vm.env.objects.put(
+                ListVal,
+                self.allocator(),
+                ListVal{
+                    .list = try lambda_expr.toOwnedSlice(self.allocator()),
+                },
+            );
+            const new_expr = try self.vm.env.objects.put(
+                ListVal,
+                self.allocator(),
+                ListVal{
+                    .list = try self.allocator().dupe(Val, &[3]Val{
+                        (try self.vm.newSymbol("%define")).toVal(),
+                        name.quoted().toVal(),
+                        lambda_expr_val.toVal(),
+                    }),
+                },
+            );
+            return new_expr.toVal();
         }
         return null;
     }

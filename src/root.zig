@@ -57,3 +57,16 @@ test "can run lambda" {
         try vm.evalStr("(foo)"),
     );
 }
+
+test "can define with defun" {
+    var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectEqual(
+        Val{ .void = {} },
+        try vm.evalStr("(defun foo () (+ 1 2 3))"),
+    );
+    try std.testing.expectEqual(
+        Val{ .int = 6 },
+        try vm.evalStr("(foo)"),
+    );
+}
