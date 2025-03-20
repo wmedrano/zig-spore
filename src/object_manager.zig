@@ -160,6 +160,7 @@ pub fn ObjectId(comptime T: type) type {
         pub fn toVal(self: Self) Val {
             switch (T) {
                 ListVal => return Val{ .list = self },
+                ByteCodeFunction => return Val{ .bytecode_function = self },
                 else => @compileError("no valid conversion to Val"),
             }
         }

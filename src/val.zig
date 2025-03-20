@@ -106,6 +106,16 @@ pub const Val = union(ValTag) {
             else => return null,
         }
     }
+
+    pub fn asList(self: Val, vm: *const Vm) ?ListVal {
+        switch (self) {
+            .list => |id| {
+                const list = if (vm.env.objects.get(ListVal, id)) |list| list else return null;
+                return list.*;
+            },
+            else => return null,
+        }
+    }
 };
 
 test "val is small" {

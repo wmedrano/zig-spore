@@ -62,7 +62,7 @@ pub const Env = struct {
 
     pub fn popStackFrame(self: *Env) !Val {
         const stack_frame = if (self.stack_frames.popOrNull()) |x| x else return error.StackFrameUnderflow;
-        const return_value = if (stack_frame.stack_start < self.stack_len) self.stack[self.stack_len - 1] else Val{ .void = {} };
+        const return_value = if (stack_frame.stack_start <= self.stack_len) self.stack[self.stack_len - 1] else Val{ .void = {} };
         self.stack_len = stack_frame.stack_start;
         return return_value;
     }

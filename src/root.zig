@@ -44,3 +44,16 @@ test "can define" {
     const get_actual = try vm.evalStr("x");
     try std.testing.expectEqual(Val{ .int = 12 }, get_actual);
 }
+
+test "can run lambda" {
+    var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectEqual(
+        Val{ .void = {} },
+        try vm.evalStr("(def foo (lambda () (+ 1 2 3)))"),
+    );
+    try std.testing.expectEqual(
+        Val{ .int = 6 },
+        try vm.evalStr("(foo)"),
+    );
+}

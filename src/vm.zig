@@ -123,6 +123,7 @@ pub const Vm = struct {
 
     fn executeEval(self: *Vm, n: usize) !void {
         const function_idx = self.env.stack_len - n;
+        const stack_start = function_idx + 1;
         const function_val = self.env.stack[function_idx];
         switch (function_val) {
             .function => |f| {
@@ -130,13 +131,24 @@ pub const Vm = struct {
                     self.allocator(),
                     StackFrame{
                         .instructions = &[0]Instruction{},
-                        .stack_start = function_idx + 1,
+                        .stack_start = stack_start,
                         .next_instruction = 0,
                     },
                 );
                 const v = try f.*.function(self);
                 self.env.stack[function_idx] = v;
                 self.env.stack_len = function_idx + 1;
+            },
+            .bytecode_function => |bytecode_id| {
+                const bytecode = self.env.objects.get(ByteCodeFunction, bytecode_id).?;
+                try self.env.pushStackFrame(
+                    self.allocator(),
+                    StackFrame{
+                        .instructions = bytecode.instructions,
+                        .stack_start = stack_start,
+                        .next_instruction = 0,
+                    },
+                );
             },
             else => return error.ValueNotCallable,
         }
