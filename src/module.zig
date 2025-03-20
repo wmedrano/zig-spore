@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Symbol = @import("symbol.zig").Symbol;
+const Symbol = @import("val.zig").Symbol;
 const Val = @import("val.zig").Val;
 
 pub const Module = struct {

@@ -1,12 +1,15 @@
 const std = @import("std");
-const Tokenizer = @import("tokenizer.zig").Tokenizer;
-const TokenType = @import("tokenizer.zig").TokenType;
-const Token = @import("tokenizer.zig").Token;
-const Val = @import("val.zig").Val;
+
 const ListVal = @import("val.zig").ListVal;
+const Span = @import("tokenizer.zig").Span;
+const Token = @import("tokenizer.zig").Token;
+const TokenType = @import("tokenizer.zig").TokenType;
+const Tokenizer = @import("tokenizer.zig").Tokenizer;
+const Val = @import("val.zig").Val;
 const Vm = @import("vm.zig").Vm;
 
 pub const Ast = struct {
+    location: Span,
     ast: Val,
 };
 
@@ -23,15 +26,22 @@ pub const AstBuilder = struct {
 
     pub fn next(self: *AstBuilder) !?Ast {
         const next_token: Token = if (self.tokenizer.next()) |t| t else return null;
+        const start = next_token.location.start;
         switch (next_token.token_type) {
             TokenType.OpenParen => {
                 const ast_val = try ownedSliceToVal(self.vm, try self.parseList());
-                return Ast{ .ast = ast_val };
+                return Ast{
+                    .location = Span{ .start = start, .end = self.tokenizer.next_idx },
+                    .ast = ast_val,
+                };
             },
             TokenType.CloseParen => return error.UnexpectedCloseParen,
             TokenType.Identifier => {
                 const val = try identifierToVal(self.vm, next_token.text(self.tokenizer.source));
-                return Ast{ .ast = val };
+                return Ast{
+                    .location = Span{ .start = start, .end = self.tokenizer.next_idx },
+                    .ast = val,
+                };
             },
         }
         return null;
@@ -61,7 +71,7 @@ fn ownedSliceToVal(vm: *Vm, slice: []Val) !Val {
     const list = ListVal{
         .list = slice,
     };
-    const id = try vm.env.objects.putList(vm.allocator(), list);
+    const id = try vm.env.objects.put(ListVal, vm.allocator(), list);
     return Val{ .list = id };
 }
 
@@ -78,5 +88,5 @@ fn identifierToVal(vm: *Vm, identifier: []const u8) !Val {
     if (std.fmt.parseFloat(f64, identifier)) |x| {
         return Val{ .float = x };
     } else |_| {}
-    return vm.newSymbol(identifier);
+    return (try vm.newSymbol(identifier)).toVal();
 }

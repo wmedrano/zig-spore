@@ -1,4 +1,6 @@
 const std = @import("std");
+
+const ByteCodeFunction = @import("val.zig").ByteCodeFunction;
 const ListVal = @import("val.zig").ListVal;
 const SymbolTable = @import("symbol.zig").SymbolTable;
 const Val = @import("val.zig").Val;
@@ -6,18 +8,31 @@ const Val = @import("val.zig").Val;
 pub const ObjectManager = struct {
     symbols: SymbolTable = .{},
     lists: ObjectStorage(ListVal) = .{},
+    bytecode_functions: ObjectStorage(ByteCodeFunction) = .{},
     reachable_color: Color = Color.blue,
 
     pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
         self.symbols.deinit(allocator);
-        for (self.lists.objects.items) |*list| {
-            list.garbageCollect(allocator);
-        }
         self.lists.deinit(allocator);
+        self.bytecode_functions.deinit(allocator);
     }
 
-    pub fn putList(self: *ObjectManager, allocator: std.mem.Allocator, list: ListVal) !ObjectId(ListVal) {
-        return self.lists.put(allocator, list, self.unreachableColor());
+    pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator, val: T) !ObjectId(T) {
+        var object_storage = switch (T) {
+            ListVal => &self.lists,
+            ByteCodeFunction => &self.bytecode_functions,
+            else => @compileError("type not supported"),
+        };
+        return object_storage.put(allocator, val, self.unreachableColor());
+    }
+
+    pub fn get(self: *const ObjectManager, comptime T: type, id: ObjectId(T)) ?*T {
+        const object_storage = switch (T) {
+            ListVal => self.lists,
+            ByteCodeFunction => self.bytecode_functions,
+            else => @compileError("type not supported"),
+        };
+        return object_storage.get(id);
     }
 
     pub fn markReachable(self: *ObjectManager, val: Val) void {
@@ -28,15 +43,8 @@ pub const ObjectManager = struct {
             .float => {},
             .symbol => {},
             .function => {},
-            .list => |list| {
-                if (self.lists.color.items[list.idx] == self.reachable_color) {
-                    return;
-                }
-                self.lists.color.items[list.idx] = self.reachable_color;
-                for (self.lists.get(list).?.list) |v| {
-                    self.markReachable(v);
-                }
-            },
+            .list => |id| self.lists.markReachable(id, self),
+            .bytecode_function => |id| self.bytecode_functions.markReachable(id, self),
         }
     }
 
@@ -92,6 +100,15 @@ fn ObjectStorage(comptime T: type) type {
                 return null;
             }
             return &self.objects.items[id.idx];
+        }
+
+        pub fn markReachable(self: *Self, id: ObjectId(T), objects: *ObjectManager) void {
+            if (self.color.items[id.idx] != objects.reachable_color) {
+                self.color.items[id.idx] = objects.reachable_color;
+                if (self.get(id)) |v| {
+                    v.markChildren(objects);
+                }
+            }
         }
 
         pub fn sweepColor(self: *Self, sweep_color: Color, allocator: std.mem.Allocator) !void {

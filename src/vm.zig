@@ -3,14 +3,16 @@ const testing = std.testing;
 
 const builtins = @import("builtins.zig");
 const AstBuilder = @import("ast.zig").AstBuilder;
+const ByteCodeFunction = @import("val.zig").ByteCodeFunction;
 const Compiler = @import("compiler.zig").Compiler;
 const Env = @import("env.zig").Env;
-const FunctionVal = @import("val.zig").FunctionVal;
 const FunctionError = @import("val.zig").FunctionError;
+const FunctionVal = @import("val.zig").FunctionVal;
 const Instruction = @import("instruction.zig").Instruction;
 const ListVal = @import("val.zig").ListVal;
+const NamedSymbol = @import("symbol.zig").NamedSymbol;
 const StackFrame = @import("env.zig").StackFrame;
-const Symbol = @import("symbol.zig").Symbol;
+const Symbol = @import("val.zig").Symbol;
 const Val = @import("val.zig").Val;
 
 pub const VmOptions = struct {
@@ -43,7 +45,10 @@ pub const Vm = struct {
     }
 
     pub fn registerGlobalValueByName(self: *Vm, name: []const u8, value: Val) !void {
-        const symbol = try self.env.objects.symbols.strToSymbol(self.allocator(), name);
+        const symbol = try self.env.objects.symbols.strToSymbol(
+            self.allocator(),
+            NamedSymbol{ .quotes = 0, .name = name },
+        );
         try self.registerGlobalValue(symbol, value);
     }
 
@@ -51,15 +56,16 @@ pub const Vm = struct {
         return self.options.allocator;
     }
 
-    pub fn newSymbol(self: *Vm, str: []const u8) !Val {
-        return Val{
-            .symbol = try self.env.objects.symbols.strToSymbol(self.options.allocator, str),
-        };
+    pub fn newSymbol(self: *Vm, str: []const u8) !Symbol {
+        return try self.env.objects.symbols.strToSymbol(
+            self.options.allocator,
+            NamedSymbol.init(str),
+        );
     }
 
     pub fn evalStr(self: *Vm, source: []const u8) !Val {
         var ast_builder = AstBuilder.init(self, source);
-        var compiler = Compiler.init(self);
+        var compiler = try Compiler.init(self);
         defer compiler.deinit();
         var ret = Val{ .void = {} };
         while (try ast_builder.next()) |ast| {
@@ -83,6 +89,13 @@ pub const Vm = struct {
     pub fn runGc(self: *Vm) !void {
         for (self.env.stack[0..self.env.stack_len]) |v| {
             self.env.objects.markReachable(v);
+        }
+        for (self.env.stack_frames.items) |stack_frame| {
+            const bytecode_function = ByteCodeFunction{
+                .name = "",
+                .instructions = stack_frame.instructions,
+            };
+            bytecode_function.markChildren(&self.env.objects);
         }
         var globalsIter = self.env.global.values.valueIterator();
         while (globalsIter.next()) |v| {
@@ -132,9 +145,9 @@ pub const Vm = struct {
     fn executeDeref(self: *Vm, symbol: Symbol) !void {
         const val = if (self.env.global.getValue(symbol)) |v| v else {
             if (self.env.objects.symbols.symbolToStr(symbol)) |name| {
-                std.log.err("Symbol {s} not found.\n", .{name});
+                std.log.err("Symbol {s} not found.\n", .{name.name});
             } else {
-                std.log.err("Symbol {any} not found.\n", .{symbol});
+                std.log.err("Symbol {any} not found.\n", .{symbol.id});
             }
             return error.SymbolNotFound;
         };

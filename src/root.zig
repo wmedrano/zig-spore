@@ -26,7 +26,7 @@ test "eval can return symbol" {
     var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
     defer vm.deinit();
     const actual = try vm.evalStr("'+");
-    try std.testing.expectEqual(vm.newSymbol("+"), actual);
+    try std.testing.expectEqual((try vm.newSymbol("+")).toVal(), actual);
 }
 
 test "eval multiple constants returns last constant" {

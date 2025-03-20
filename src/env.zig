@@ -2,7 +2,9 @@ const std = @import("std");
 const Instruction = @import("instruction.zig").Instruction;
 const Module = @import("module.zig").Module;
 const ObjectManager = @import("object_manager.zig").ObjectManager;
+const ObjectId = @import("object_manager.zig").ObjectId;
 const Val = @import("val.zig").Val;
+const ByteCodeFunction = @import("val.zig").ByteCodeFunction;
 
 pub const Env = struct {
     global: Module,
