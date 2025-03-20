@@ -10,7 +10,7 @@ const Vm = @import("vm.zig").Vm;
 const Instruction = @import("instruction.zig").Instruction;
 const Ast = @import("ast.zig").Ast;
 
-const CompileError = error{ UnexpectedEmptyExpression, BadDefine } || Allocator.Error;
+const CompileError = error{ ExpectedIdentifier, UnexpectedEmptyExpression, BadDefine } || Allocator.Error;
 
 pub const Compiler = struct {
     vm: *Vm,
@@ -38,8 +38,73 @@ pub const Compiler = struct {
         try self.compileOne(ast.ast);
     }
 
+    fn expandAst(self: *Compiler, ast: Val) !?Val {
+        var ret = ast;
+        var didReplace = false;
+        if (try self.expandSubExpressions(ret)) |v| {
+            ret = v;
+            didReplace = true;
+        }
+        if (try self.expandDefAst(ret)) |v| {
+            ret = v;
+            didReplace = true;
+        }
+        if (didReplace) return ret else return null;
+    }
+
+    fn expandSubExpressions(self: *Compiler, ast: Val) CompileError!?Val {
+        const exprs = switch (ast) {
+            .list => |id| self.vm.env.objects.get(ListVal, id).?.list,
+            else => return null,
+        };
+        var expandedExpr: ?[]Val = null;
+        defer if (expandedExpr) |v| self.allocator().free(v);
+        for (exprs, 0..exprs.len) |sub_expr, idx| {
+            if (try self.expandAst(sub_expr)) |v| {
+                if (expandedExpr) |_| {} else {
+                    expandedExpr = try self.allocator().dupe(Val, exprs);
+                }
+                expandedExpr.?[idx] = v;
+            }
+        }
+        if (expandedExpr) |v| {
+            const list_val = try self.vm.env.objects.put(
+                ListVal,
+                self.allocator(),
+                ListVal{ .list = v },
+            );
+            expandedExpr = null;
+            return list_val.toVal();
+        }
+        return null;
+    }
+
+    fn expandDefAst(self: *Compiler, ast: Val) !?Val {
+        const expr = switch (ast) {
+            .list => |id| self.vm.env.objects.get(ListVal, id).?.list,
+            else => return null,
+        };
+        const leading_symbol = if (expr[0].asSymbol()) |x| x else return null;
+        if (leading_symbol.eql(self.def_symbol)) {
+            if (expr.len != 3) {
+                return CompileError.BadDefine;
+            }
+            const symbol = if (expr[1].asSymbol()) |x| x.quoted() else return CompileError.ExpectedIdentifier;
+            const new_expr = try self.vm.env.objects.put(ListVal, self.allocator(), ListVal{
+                .list = try self.allocator().dupe(Val, &[3]Val{
+                    (try self.vm.newSymbol("%define")).toVal(),
+                    symbol.toVal(),
+                    expr[2],
+                }),
+            });
+            return new_expr.toVal();
+        }
+        return null;
+    }
+
     fn compileOne(self: *Compiler, ast: Val) CompileError!void {
-        switch (ast) {
+        const expanded_ast = if (try self.expandAst(ast)) |v| v else ast;
+        switch (expanded_ast) {
             .list => |list_id| {
                 const list = self.vm.env.objects.get(ListVal, list_id);
                 try self.compileTree(list.?.list);

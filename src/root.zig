@@ -39,7 +39,7 @@ test "eval multiple constants returns last constant" {
 test "can define" {
     var vm = try Vm.init(VmOptions{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    const define_actual = try vm.evalStr("(%define 'x 12)");
+    const define_actual = try vm.evalStr("(def x 12)");
     try std.testing.expectEqual(Val{ .void = {} }, define_actual);
     const get_actual = try vm.evalStr("x");
     try std.testing.expectEqual(Val{ .int = 12 }, get_actual);

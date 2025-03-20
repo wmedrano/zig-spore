@@ -12,11 +12,27 @@ pub const Symbol = packed struct {
     id: u30,
 
     pub fn eql(self: Symbol, other: Symbol) bool {
-        return @as(@bitCast(self), u32) == @as(@bitCast(other), u32);
+        return self.quotes == other.quotes and self.id == other.id;
     }
 
     pub fn toVal(self: Symbol) Val {
         return Val{ .symbol = self };
+    }
+
+    pub fn quoted(self: Symbol) Symbol {
+        if (self.quotes == std.math.maxInt(u2)) return self;
+        return Symbol{
+            .quotes = self.quotes + 1,
+            .id = self.id,
+        };
+    }
+
+    pub fn unquoted(self: Symbol) Symbol {
+        if (self.quotes == 0) return self;
+        return Symbol{
+            .quotes = self.quotes - 1,
+            .id = self.id,
+        };
     }
 };
 
@@ -83,6 +99,13 @@ pub const Val = union(ValTag) {
     list: ObjectId(ListVal),
     function: *const FunctionVal,
     bytecode_function: ObjectId(ByteCodeFunction),
+
+    pub fn asSymbol(self: Val) ?Symbol {
+        switch (self) {
+            .symbol => |symbol| return symbol,
+            else => return null,
+        }
+    }
 };
 
 test "val is small" {

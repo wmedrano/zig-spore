@@ -11,8 +11,8 @@ pub const NamedSymbol = struct {
         while (quotes < str.len and str[quotes] == '\'') {
             quotes += 1;
         }
-        if (quotes > 3) {
-            quotes = 3;
+        if (quotes > std.math.maxInt(u2)) {
+            quotes = std.math.maxInt(u2);
         }
         return NamedSymbol{
             .quotes = @intCast(quotes),

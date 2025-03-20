@@ -151,9 +151,17 @@ const Tag = packed struct {
     }
 };
 
-pub fn ObjectId(comptime _: type) type {
+pub fn ObjectId(comptime T: type) type {
     return packed struct {
         tag: Tag,
         idx: u24,
+
+        const Self = @This();
+        pub fn toVal(self: Self) Val {
+            switch (T) {
+                ListVal => return Val{ .list = self },
+                else => @compileError("no valid conversion to Val"),
+            }
+        }
     };
 }
