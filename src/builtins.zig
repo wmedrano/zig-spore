@@ -1,7 +1,7 @@
 const FunctionError = @import("val.zig").FunctionError;
 const FunctionVal = @import("val.zig").FunctionVal;
 const Val = @import("val.zig").Val;
-const Vm = @import("vm.zig").Vm;
+const Vm = @import("Vm.zig");
 
 pub fn registerAll(vm: *Vm) !void {
     try vm.registerGlobalFunction(&DEFINE_FUNCTION);

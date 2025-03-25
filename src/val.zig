@@ -1,35 +1,80 @@
 const std = @import("std");
 
 const Instruction = @import("instruction.zig").Instruction;
-const ObjectId = @import("object_manager.zig").ObjectId;
-const ObjectManager = @import("object_manager.zig").ObjectManager;
-const Vm = @import("vm.zig").Vm;
+const ObjectManager = @import("ObjectManager.zig");
+const Vm = @import("Vm.zig");
+const Symbol = @import("Symbol.zig");
 
 pub const FunctionError = error{ WrongArity, WrongType } || std.mem.Allocator.Error;
 
-pub const Symbol = packed struct {
+pub const ValTag = enum {
+    void,
+    bool,
+    int,
+    float,
+    symbol,
+    list,
+    function,
+    bytecode_function,
+};
+
+pub const Val = union(ValTag) {
+    void,
+    bool: bool,
+    int: i64,
+    float: f64,
+    symbol: InternedSymbol,
+    list: ObjectManager.Id(ListVal),
+    function: *const FunctionVal,
+    bytecode_function: ObjectManager.Id(ByteCodeFunction),
+
+    pub fn asInternedSymbol(self: Val) ?InternedSymbol {
+        switch (self) {
+            .symbol => |symbol| return symbol,
+            else => return null,
+        }
+    }
+
+    pub fn asSymbol(self: Val, vm: *const Vm) !?Symbol {
+        const symbol = self.asInternedSymbol();
+        if (!symbol) return null;
+        vm.env.objects.symbols.symbolToStr(symbol.?);
+    }
+
+    pub fn asList(self: Val, vm: *const Vm) ?ListVal {
+        switch (self) {
+            .list => |id| {
+                const list = if (vm.env.objects.get(ListVal, id)) |list| list else return null;
+                return list.*;
+            },
+            else => return null,
+        }
+    }
+};
+
+pub const InternedSymbol = packed struct {
     quotes: u2,
     id: u30,
 
-    pub fn eql(self: Symbol, other: Symbol) bool {
+    pub fn eql(self: InternedSymbol, other: InternedSymbol) bool {
         return self.quotes == other.quotes and self.id == other.id;
     }
 
-    pub fn toVal(self: Symbol) Val {
+    pub fn toVal(self: InternedSymbol) Val {
         return Val{ .symbol = self };
     }
 
-    pub fn quoted(self: Symbol) Symbol {
+    pub fn quoted(self: InternedSymbol) InternedSymbol {
         if (self.quotes == std.math.maxInt(u2)) return self;
-        return Symbol{
+        return InternedSymbol{
             .quotes = self.quotes + 1,
             .id = self.id,
         };
     }
 
-    pub fn unquoted(self: Symbol) Symbol {
+    pub fn unquoted(self: InternedSymbol) InternedSymbol {
         if (self.quotes == 0) return self;
-        return Symbol{
+        return InternedSymbol{
             .quotes = self.quotes - 1,
             .id = self.id,
         };
@@ -75,45 +120,6 @@ pub const ByteCodeFunction = struct {
                 .deref => {},
                 .ret => {},
             }
-        }
-    }
-};
-
-pub const ValTag = enum {
-    void,
-    bool,
-    int,
-    float,
-    symbol,
-    list,
-    function,
-    bytecode_function,
-};
-
-pub const Val = union(ValTag) {
-    void,
-    bool: bool,
-    int: i64,
-    float: f64,
-    symbol: Symbol,
-    list: ObjectId(ListVal),
-    function: *const FunctionVal,
-    bytecode_function: ObjectId(ByteCodeFunction),
-
-    pub fn asSymbol(self: Val) ?Symbol {
-        switch (self) {
-            .symbol => |symbol| return symbol,
-            else => return null,
-        }
-    }
-
-    pub fn asList(self: Val, vm: *const Vm) ?ListVal {
-        switch (self) {
-            .list => |id| {
-                const list = if (vm.env.objects.get(ListVal, id)) |list| list else return null;
-                return list.*;
-            },
-            else => return null,
         }
     }
 };

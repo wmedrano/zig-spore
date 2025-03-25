@@ -1,5 +1,58 @@
 const std = @import("std");
 
+const Tokenizer = @This();
+
+source: []const u8,
+next_idx: u32,
+
+pub fn init(source: []const u8) Tokenizer {
+    return Tokenizer{ .source = source, .next_idx = 0 };
+}
+
+pub fn next(self: *Tokenizer) ?Token {
+    self.takeWhitespace();
+    if (self.isDone()) {
+        return null;
+    }
+    const next_char = self.source[self.next_idx];
+    switch (next_char) {
+        '(', ')' => {
+            const token = Token{
+                .token_type = if (next_char == '(') TokenType.OpenParen else TokenType.CloseParen,
+                .location = Span{ .start = self.next_idx, .end = self.next_idx + 1 },
+            };
+            self.next_idx = token.location.end;
+            return token;
+        },
+        else => {
+            const start = self.next_idx;
+            self.takeIdentifier();
+            return Token{
+                .token_type = TokenType.Identifier,
+                .location = Span{ .start = start, .end = self.next_idx },
+            };
+        },
+    }
+}
+
+pub fn toArray(self: *Tokenizer, allocator: std.mem.Allocator) ![]Token {
+    var ret = std.ArrayListUnmanaged(Token){};
+    defer ret.deinit(allocator);
+    while (self.next()) |token| {
+        try ret.append(allocator, token);
+    }
+    return try allocator.dupe(Token, ret.items);
+}
+
+pub const Token = struct {
+    token_type: TokenType,
+    location: Span,
+
+    pub fn text(self: *const Token, source: []const u8) []const u8 {
+        return source[self.location.start..self.location.end];
+    }
+};
+
 pub const Span = struct {
     start: u32,
     end: u32,
@@ -11,79 +64,26 @@ pub const TokenType = enum {
     Identifier,
 };
 
-pub const Token = struct {
-    token_type: TokenType,
-    location: Span,
-
-    pub fn text(self: *const Token, source: []const u8) []const u8 {
-        return source[self.location.start..self.location.end];
+fn takeWhitespace(self: *Tokenizer) void {
+    while (!self.isDone() and isWhitespace(self.source[self.next_idx])) {
+        self.next_idx += 1;
     }
-};
+}
 
-pub const Tokenizer = struct {
-    source: []const u8,
-    next_idx: u32,
-
-    pub fn init(source: []const u8) Tokenizer {
-        return Tokenizer{ .source = source, .next_idx = 0 };
-    }
-
-    pub fn next(self: *Tokenizer) ?Token {
-        self.takeWhitespace();
-        if (self.isDone()) {
-            return null;
-        }
+fn takeIdentifier(self: *Tokenizer) void {
+    while (!self.isDone()) {
         const next_char = self.source[self.next_idx];
-        switch (next_char) {
-            '(', ')' => {
-                const token = Token{
-                    .token_type = if (next_char == '(') TokenType.OpenParen else TokenType.CloseParen,
-                    .location = Span{ .start = self.next_idx, .end = self.next_idx + 1 },
-                };
-                self.next_idx = token.location.end;
-                return token;
-            },
-            else => {
-                const start = self.next_idx;
-                self.takeIdentifier();
-                return Token{
-                    .token_type = TokenType.Identifier,
-                    .location = Span{ .start = start, .end = self.next_idx },
-                };
-            },
+        if (isWhitespace(next_char) or next_char == '(' or next_char == ')') {
+            return;
         }
+        self.next_idx += 1;
     }
+}
 
-    pub fn toArray(self: *Tokenizer, allocator: std.mem.Allocator) ![]Token {
-        var ret = std.ArrayListUnmanaged(Token){};
-        defer ret.deinit(allocator);
-        while (self.next()) |token| {
-            try ret.append(allocator, token);
-        }
-        return try allocator.dupe(Token, ret.items);
-    }
-
-    fn takeWhitespace(self: *Tokenizer) void {
-        while (!self.isDone() and isWhitespace(self.source[self.next_idx])) {
-            self.next_idx += 1;
-        }
-    }
-
-    fn takeIdentifier(self: *Tokenizer) void {
-        while (!self.isDone()) {
-            const next_char = self.source[self.next_idx];
-            if (isWhitespace(next_char) or next_char == '(' or next_char == ')') {
-                return;
-            }
-            self.next_idx += 1;
-        }
-    }
-
-    fn isDone(self: *const Tokenizer) bool {
-        const is_ok = self.next_idx < self.source.len;
-        return !is_ok;
-    }
-};
+fn isDone(self: *const Tokenizer) bool {
+    const is_ok = self.next_idx < self.source.len;
+    return !is_ok;
+}
 
 fn isWhitespace(ch: u8) bool {
     switch (ch) {

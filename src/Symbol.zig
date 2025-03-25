@@ -1,25 +1,25 @@
 const std = @import("std");
 
-const Symbol = @import("val.zig").Symbol;
+const InternedSymbol = @import("val.zig").InternedSymbol;
 
-pub const NamedSymbol = struct {
-    quotes: u2,
-    name: []const u8,
+const Symbol = @This();
 
-    pub fn init(str: []const u8) NamedSymbol {
-        var quotes: usize = 0;
-        while (quotes < str.len and str[quotes] == '\'') {
-            quotes += 1;
-        }
-        if (quotes > std.math.maxInt(u2)) {
-            quotes = std.math.maxInt(u2);
-        }
-        return NamedSymbol{
-            .quotes = @intCast(quotes),
-            .name = str[quotes..],
-        };
+quotes: u2,
+name: []const u8,
+
+pub fn init(str: []const u8) !Symbol {
+    var quotes: usize = 0;
+    while (quotes < str.len and str[quotes] == '\'') {
+        quotes += 1;
     }
-};
+    if (quotes > std.math.maxInt(u2)) {
+        return error.TooManyQuotes;
+    }
+    return Symbol{
+        .quotes = @intCast(quotes),
+        .name = str[quotes..],
+    };
+}
 
 pub const SymbolTable = struct {
     symbols: std.ArrayListUnmanaged([]const u8) = .{},
@@ -33,23 +33,23 @@ pub const SymbolTable = struct {
         self.name_to_symbol.deinit(allocator);
     }
 
-    pub fn strToSymbol(self: *SymbolTable, allocator: std.mem.Allocator, str: NamedSymbol) !Symbol {
+    pub fn strToSymbol(self: *SymbolTable, allocator: std.mem.Allocator, str: Symbol) !InternedSymbol {
         if (self.name_to_symbol.get(str.name)) |id| {
-            return Symbol{
+            return InternedSymbol{
                 .quotes = str.quotes,
                 .id = id,
             };
         }
         const name = try allocator.dupe(u8, str.name);
-        const id = Symbol{ .quotes = str.quotes, .id = @intCast(self.size()) };
+        const id = InternedSymbol{ .quotes = str.quotes, .id = @intCast(self.size()) };
         try self.symbols.append(allocator, name);
         try self.name_to_symbol.put(allocator, name, id.id);
         return id;
     }
 
-    pub fn symbolToStr(self: *const SymbolTable, symbol: Symbol) ?NamedSymbol {
+    pub fn symbolToStr(self: *const SymbolTable, symbol: InternedSymbol) ?Symbol {
         if (symbol.id < self.size()) {
-            return NamedSymbol{
+            return Symbol{
                 .quotes = symbol.quotes,
                 .name = self.symbols.items[symbol.id],
             };
@@ -76,15 +76,15 @@ fn countQuotes(s: []const u8) u2 {
 test "symbols from different but equivalent strings are bitwise equal" {
     var symbol_table = SymbolTable{};
     defer symbol_table.deinit(std.testing.allocator);
-    const symbol_1 = try symbol_table.strToSymbol(std.testing.allocator, NamedSymbol.init("symbol"));
-    const symbol_2 = try symbol_table.strToSymbol(std.testing.allocator, NamedSymbol.init("symbol"));
+    const symbol_1 = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.init("symbol"));
+    const symbol_2 = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.init("symbol"));
     try std.testing.expectEqual(symbol_1, symbol_2);
 }
 
 test "symbol can be converted to str" {
     var symbol_table = SymbolTable{};
     defer symbol_table.deinit(std.testing.allocator);
-    const symbol = try symbol_table.strToSymbol(std.testing.allocator, NamedSymbol.init("symbol"));
+    const symbol = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.init("symbol"));
     const actual = symbol_table.symbolToStr(symbol).?;
-    try std.testing.expectEqualDeep(NamedSymbol.init("symbol"), actual);
+    try std.testing.expectEqualDeep(Symbol.init("symbol"), actual);
 }

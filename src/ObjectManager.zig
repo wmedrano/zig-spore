@@ -1,68 +1,68 @@
 const std = @import("std");
 
 const ByteCodeFunction = @import("val.zig").ByteCodeFunction;
-const ListVal = @import("val.zig").ListVal;
-const SymbolTable = @import("symbol.zig").SymbolTable;
+const SymbolTable = @import("Symbol.zig").SymbolTable;
 const Val = @import("val.zig").Val;
+const ListVal = @import("val.zig").ListVal;
 
-pub const ObjectManager = struct {
-    symbols: SymbolTable = .{},
-    lists: ObjectStorage(ListVal) = .{},
-    bytecode_functions: ObjectStorage(ByteCodeFunction) = .{},
-    reachable_color: Color = Color.blue,
+const ObjectManager = @This();
 
-    pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
-        self.symbols.deinit(allocator);
-        self.lists.deinit(allocator);
-        self.bytecode_functions.deinit(allocator);
+symbols: SymbolTable = .{},
+lists: ObjectStorage(ListVal) = .{},
+bytecode_functions: ObjectStorage(ByteCodeFunction) = .{},
+reachable_color: Color = Color.blue,
+
+pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
+    self.symbols.deinit(allocator);
+    self.lists.deinit(allocator);
+    self.bytecode_functions.deinit(allocator);
+}
+
+pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator, val: T) !Id(T) {
+    var object_storage = switch (T) {
+        ListVal => &self.lists,
+        ByteCodeFunction => &self.bytecode_functions,
+        else => @compileError("type not supported"),
+    };
+    return object_storage.put(allocator, val, self.unreachableColor());
+}
+
+pub fn get(self: *const ObjectManager, comptime T: type, id: Id(T)) ?*T {
+    const object_storage = switch (T) {
+        ListVal => self.lists,
+        ByteCodeFunction => self.bytecode_functions,
+        else => @compileError("type not supported"),
+    };
+    return object_storage.get(id);
+}
+
+pub fn markReachable(self: *ObjectManager, val: Val) void {
+    switch (val) {
+        .void => {},
+        .bool => {},
+        .int => {},
+        .float => {},
+        .symbol => {},
+        .function => {},
+        .list => |id| self.lists.markReachable(id, self),
+        .bytecode_function => |id| self.bytecode_functions.markReachable(id, self),
     }
+}
 
-    pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator, val: T) !ObjectId(T) {
-        var object_storage = switch (T) {
-            ListVal => &self.lists,
-            ByteCodeFunction => &self.bytecode_functions,
-            else => @compileError("type not supported"),
-        };
-        return object_storage.put(allocator, val, self.unreachableColor());
-    }
+pub fn sweepUnreachable(self: *ObjectManager, allocator: std.mem.Allocator) !void {
+    try self.lists.sweepColor(self.unreachableColor(), allocator);
+}
 
-    pub fn get(self: *const ObjectManager, comptime T: type, id: ObjectId(T)) ?*T {
-        const object_storage = switch (T) {
-            ListVal => self.lists,
-            ByteCodeFunction => self.bytecode_functions,
-            else => @compileError("type not supported"),
-        };
-        return object_storage.get(id);
-    }
-
-    pub fn markReachable(self: *ObjectManager, val: Val) void {
-        switch (val) {
-            .void => {},
-            .bool => {},
-            .int => {},
-            .float => {},
-            .symbol => {},
-            .function => {},
-            .list => |id| self.lists.markReachable(id, self),
-            .bytecode_function => |id| self.bytecode_functions.markReachable(id, self),
-        }
-    }
-
-    pub fn sweepUnreachable(self: *ObjectManager, allocator: std.mem.Allocator) !void {
-        try self.lists.sweepColor(self.unreachableColor(), allocator);
-    }
-
-    fn unreachableColor(self: *const ObjectManager) Color {
-        return otherColor(self.reachable_color);
-    }
-};
+fn unreachableColor(self: *const ObjectManager) Color {
+    return otherColor(self.reachable_color);
+}
 
 fn ObjectStorage(comptime T: type) type {
     return struct {
         objects: std.ArrayListUnmanaged(T) = .{},
         tags: std.ArrayListUnmanaged(Tag) = .{},
         color: std.ArrayListUnmanaged(Color) = .{},
-        available: std.ArrayListUnmanaged(ObjectId(T)) = .{},
+        available: std.ArrayListUnmanaged(Id(T)) = .{},
 
         const Self = @This();
 
@@ -78,14 +78,14 @@ fn ObjectStorage(comptime T: type) type {
             self.available.deinit(allocator);
         }
 
-        pub fn put(self: *Self, allocator: std.mem.Allocator, obj: T, color: Color) !ObjectId(T) {
+        pub fn put(self: *Self, allocator: std.mem.Allocator, obj: T, color: Color) !Id(T) {
             if (self.available.popOrNull()) |id| {
                 self.objects.items[id.idx] = obj;
                 self.tags.items[id.idx] = id.tag;
                 self.color.items[id.idx] = color;
                 return id;
             }
-            const id = ObjectId(T){
+            const id = Id(T){
                 .tag = .{},
                 .idx = @intCast(self.objects.items.len),
             };
@@ -95,14 +95,14 @@ fn ObjectStorage(comptime T: type) type {
             return id;
         }
 
-        pub fn get(self: *const Self, id: ObjectId(T)) ?*T {
+        pub fn get(self: *const Self, id: Id(T)) ?*T {
             if (!self.tags.items[id.idx].eql(id.tag)) {
                 return null;
             }
             return &self.objects.items[id.idx];
         }
 
-        pub fn markReachable(self: *Self, id: ObjectId(T), objects: *ObjectManager) void {
+        pub fn markReachable(self: *Self, id: Id(T), objects: *ObjectManager) void {
             if (self.color.items[id.idx] != objects.reachable_color) {
                 self.color.items[id.idx] = objects.reachable_color;
                 if (self.get(id)) |v| {
@@ -119,7 +119,7 @@ fn ObjectStorage(comptime T: type) type {
                     self.tags.items[idx] = self.tags.items[idx].next();
                     try self.available.append(
                         allocator,
-                        ObjectId(T){
+                        Id(T){
                             .tag = self.tags.items[idx],
                             .idx = @intCast(idx),
                         },
@@ -151,7 +151,7 @@ const Tag = packed struct {
     }
 };
 
-pub fn ObjectId(comptime T: type) type {
+pub fn Id(comptime T: type) type {
     return packed struct {
         tag: Tag,
         idx: u24,

@@ -1,13 +1,13 @@
 const std = @import("std");
-const Symbol = @import("val.zig").Symbol;
+const InternedSymbol = @import("val.zig").InternedSymbol;
 const Val = @import("val.zig").Val;
-const Vm = @import("vm.zig").Vm;
+const Vm = @import("Vm.zig");
 
 pub const InstructionTag = enum { push, eval, deref, ret };
 
 pub const Instruction = union(InstructionTag) {
     push: Val,
     eval: u32,
-    deref: Symbol,
+    deref: InternedSymbol,
     ret,
 };
