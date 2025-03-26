@@ -2,28 +2,36 @@ const std = @import("std");
 const testing = std.testing;
 
 const AstBuilder = @import("AstBuilder.zig");
-const ByteCodeFunction = @import("val.zig").ByteCodeFunction;
 const Compiler = @import("Compiler.zig");
 const Env = @import("Env.zig");
-const FunctionError = @import("val.zig").FunctionError;
-const FunctionVal = @import("val.zig").FunctionVal;
 const Instruction = @import("instruction.zig").Instruction;
-const InternedSymbol = @import("val.zig").InternedSymbol;
-const ListVal = @import("val.zig").ListVal;
 const Symbol = @import("Symbol.zig");
-const Val = @import("val.zig").Val;
 const builtins = @import("builtins.zig");
 
 const Vm = @This();
+pub const Val = @import("Val.zig");
 
+/// Contains settings for operating the virtual machine.
 options: Options,
+/// Contains the state of the virtual machine.
 env: Env,
 
+/// Options for operating the virtual machine.
 pub const Options = struct {
+    /// The size of the stack VM.
+    ///
+    /// Higher values use more memory, but may be needed to avoid
+    /// stack overflow. Stack overflows occur when there is not enough
+    /// stack capacity, which may stem from large function call stack or
+    /// functions that need a lot of local state.
     comptime stack_size: usize = 4096,
+
+    /// The allocator to use. All objects on the `Vm` will use this
+    /// allocator.
     allocator: std.mem.Allocator,
 };
 
+/// Create a new `Vm` with the given options.
 pub fn init(options: Options) !Vm {
     var vm = Vm{
         .options = options,
@@ -33,30 +41,11 @@ pub fn init(options: Options) !Vm {
     return vm;
 }
 
-pub fn registerGlobalFunction(self: *Vm, function: *const FunctionVal) !void {
-    try self.registerGlobalValueByName(
-        function.name,
-        Val{ .function = function },
-    );
-}
-
-pub fn registerGlobalValue(self: *Vm, symbol: InternedSymbol, value: Val) !void {
-    try self.env.global.putValue(self.allocator(), symbol, value);
-}
-
-pub fn registerGlobalValueByName(self: *Vm, name: []const u8, value: Val) !void {
-    const symbol = try self.env.objects.symbols.strToSymbol(
-        self.allocator(),
-        Symbol{ .quotes = 0, .name = name },
-    );
-    try self.registerGlobalValue(symbol, value);
-}
-
 pub fn allocator(self: *Vm) std.mem.Allocator {
     return self.options.allocator;
 }
 
-pub fn newSymbol(self: *Vm, str: []const u8) !InternedSymbol {
+pub fn newSymbol(self: *Vm, str: []const u8) !Val.InternedSymbol {
     return try self.env.objects.symbols.strToSymbol(
         self.options.allocator,
         try Symbol.init(str),
@@ -67,7 +56,7 @@ pub fn evalStr(self: *Vm, source: []const u8) !Val {
     var ast_builder = AstBuilder.init(self, source);
     var compiler = try Compiler.init(self);
     defer compiler.deinit();
-    var ret = Val{ .void = {} };
+    var ret = Val.init();
     while (try ast_builder.next()) |ast| {
         try compiler.compile(ast.expr);
         self.env.resetStacks();
@@ -91,7 +80,7 @@ pub fn runGc(self: *Vm) !void {
         self.env.objects.markReachable(v);
     }
     for (self.env.stack_frames.items) |stack_frame| {
-        const bytecode_function = ByteCodeFunction{
+        const bytecode_function = Val.ByteCodeFunction{
             .name = "",
             .instructions = stack_frame.instructions,
         };
@@ -105,7 +94,7 @@ pub fn runGc(self: *Vm) !void {
 }
 
 fn run(self: *Vm) !Val {
-    var return_value = Val{ .void = {} };
+    var return_value = Val.init();
     while (self.env.nextInstruction()) |instruction| {
         switch (instruction) {
             .push => |val| try self.executePush(val),
@@ -125,7 +114,7 @@ fn executeEval(self: *Vm, n: usize) !void {
     const function_idx = self.env.stack_len - n;
     const stack_start = function_idx + 1;
     const function_val = self.env.stack[function_idx];
-    switch (function_val) {
+    switch (function_val.repr) {
         .function => |f| {
             try self.env.pushStackFrame(
                 self.allocator(),
@@ -140,7 +129,7 @@ fn executeEval(self: *Vm, n: usize) !void {
             self.env.stack_len = function_idx + 1;
         },
         .bytecode_function => |bytecode_id| {
-            const bytecode = self.env.objects.get(ByteCodeFunction, bytecode_id).?;
+            const bytecode = self.env.objects.get(Val.ByteCodeFunction, bytecode_id).?;
             try self.env.pushStackFrame(
                 self.allocator(),
                 Env.StackFrame{
@@ -154,7 +143,7 @@ fn executeEval(self: *Vm, n: usize) !void {
     }
 }
 
-fn executeDeref(self: *Vm, symbol: InternedSymbol) !void {
+fn executeDeref(self: *Vm, symbol: Val.InternedSymbol) !void {
     const val = if (self.env.global.getValue(symbol)) |v| v else {
         if (self.env.objects.symbols.symbolToStr(symbol)) |name| {
             std.log.err("Symbol {s} not found.\n", .{name.name});

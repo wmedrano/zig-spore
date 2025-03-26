@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const InternedSymbol = @import("val.zig").InternedSymbol;
+const Val = @import("Val.zig");
 
 const Symbol = @This();
 
@@ -33,21 +33,21 @@ pub const SymbolTable = struct {
         self.name_to_symbol.deinit(allocator);
     }
 
-    pub fn strToSymbol(self: *SymbolTable, allocator: std.mem.Allocator, str: Symbol) !InternedSymbol {
+    pub fn strToSymbol(self: *SymbolTable, allocator: std.mem.Allocator, str: Symbol) !Val.InternedSymbol {
         if (self.name_to_symbol.get(str.name)) |id| {
-            return InternedSymbol{
+            return Val.InternedSymbol{
                 .quotes = str.quotes,
                 .id = id,
             };
         }
         const name = try allocator.dupe(u8, str.name);
-        const id = InternedSymbol{ .quotes = str.quotes, .id = @intCast(self.size()) };
+        const id = Val.InternedSymbol{ .quotes = str.quotes, .id = @intCast(self.size()) };
         try self.symbols.append(allocator, name);
         try self.name_to_symbol.put(allocator, name, id.id);
         return id;
     }
 
-    pub fn symbolToStr(self: SymbolTable, symbol: InternedSymbol) ?Symbol {
+    pub fn symbolToStr(self: SymbolTable, symbol: Val.InternedSymbol) ?Symbol {
         if (symbol.id < self.size()) {
             return Symbol{
                 .quotes = symbol.quotes,

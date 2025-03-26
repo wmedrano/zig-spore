@@ -1,8 +1,7 @@
 const std = @import("std");
 
-const ListVal = @import("val.zig").ListVal;
 const Tokenizer = @import("Tokenizer.zig");
-const Val = @import("val.zig").Val;
+const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
 const AstBuilder = @This();
@@ -65,25 +64,21 @@ fn parseList(self: *AstBuilder) ![]Val {
 }
 
 fn ownedSliceToVal(vm: *Vm, slice: []Val) !Val {
-    const list = ListVal{
-        .list = slice,
-    };
-    const id = try vm.env.objects.put(ListVal, vm.allocator(), list);
-    return Val{ .list = id };
+    return Val.fromOwnedList(vm, slice);
 }
 
 fn identifierToVal(vm: *Vm, identifier: []const u8) !Val {
     if (std.mem.eql(u8, identifier, "true")) {
-        return Val{ .bool = true };
+        return Val.fromBool(true);
     }
     if (std.mem.eql(u8, identifier, "false")) {
-        return Val{ .bool = false };
+        return Val.fromBool(true);
     }
     if (std.fmt.parseInt(i64, identifier, 10)) |x| {
-        return Val{ .int = x };
+        return Val.fromInt(x);
     } else |_| {}
     if (std.fmt.parseFloat(f64, identifier)) |x| {
-        return Val{ .float = x };
+        return Val.fromFloat(x);
     } else |_| {}
     return (try vm.newSymbol(identifier)).toVal();
 }

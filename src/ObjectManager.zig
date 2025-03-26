@@ -1,15 +1,13 @@
 const std = @import("std");
 
-const ByteCodeFunction = @import("val.zig").ByteCodeFunction;
 const SymbolTable = @import("Symbol.zig").SymbolTable;
-const Val = @import("val.zig").Val;
-const ListVal = @import("val.zig").ListVal;
+const Val = @import("Val.zig");
 
 const ObjectManager = @This();
 
 symbols: SymbolTable = .{},
-lists: ObjectStorage(ListVal) = .{},
-bytecode_functions: ObjectStorage(ByteCodeFunction) = .{},
+lists: ObjectStorage(Val.List) = .{},
+bytecode_functions: ObjectStorage(Val.ByteCodeFunction) = .{},
 reachable_color: Color = Color.blue,
 
 pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
@@ -20,8 +18,8 @@ pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
 
 pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator, val: T) !Id(T) {
     var object_storage = switch (T) {
-        ListVal => &self.lists,
-        ByteCodeFunction => &self.bytecode_functions,
+        Val.List => &self.lists,
+        Val.ByteCodeFunction => &self.bytecode_functions,
         else => @compileError("type not supported"),
     };
     return object_storage.put(allocator, val, self.unreachableColor());
@@ -29,15 +27,15 @@ pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator,
 
 pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
     const object_storage = switch (T) {
-        ListVal => self.lists,
-        ByteCodeFunction => self.bytecode_functions,
+        Val.List => self.lists,
+        Val.ByteCodeFunction => self.bytecode_functions,
         else => @compileError("type not supported"),
     };
     return object_storage.get(id);
 }
 
 pub fn markReachable(self: *ObjectManager, val: Val) void {
-    switch (val) {
+    switch (val.repr) {
         .void => {},
         .bool => {},
         .int => {},
@@ -159,8 +157,8 @@ pub fn Id(comptime T: type) type {
         const Self = @This();
         pub fn toVal(self: Self) Val {
             switch (T) {
-                ListVal => return Val{ .list = self },
-                ByteCodeFunction => return Val{ .bytecode_function = self },
+                Val.List => return Val{ .repr = .{ .list = self } },
+                Val.ByteCodeFunction => return Val{ .repr = .{ .bytecode_function = self } },
                 else => @compileError("no valid conversion to Val"),
             }
         }

@@ -2,7 +2,7 @@ const std = @import("std");
 const Instruction = @import("instruction.zig").Instruction;
 const Module = @import("Module.zig");
 const ObjectManager = @import("ObjectManager.zig");
-const Val = @import("val.zig").Val;
+const Val = @import("Val.zig");
 
 const Env = @This();
 
@@ -61,7 +61,7 @@ pub fn pushStackFrame(self: *Env, allocator: std.mem.Allocator, stack_frame: Sta
 
 pub fn popStackFrame(self: *Env) !Val {
     const stack_frame = if (self.stack_frames.popOrNull()) |x| x else return error.StackFrameUnderflow;
-    const return_value = if (stack_frame.stack_start <= self.stack_len) self.stack[self.stack_len - 1] else Val{ .void = {} };
+    const return_value = if (stack_frame.stack_start <= self.stack_len) self.stack[self.stack_len - 1] else Val.init();
     self.stack_len = stack_frame.stack_start;
     return return_value;
 }

@@ -1,11 +1,8 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
-const ByteCodeFunction = @import("val.zig").ByteCodeFunction;
 const Instruction = @import("instruction.zig").Instruction;
-const InternedSymbol = @import("val.zig").InternedSymbol;
-const ListVal = @import("val.zig").ListVal;
-const Val = @import("val.zig").Val;
+const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
 const Compiler = @This();
@@ -23,10 +20,10 @@ vm: *Vm,
 instructions: std.ArrayListUnmanaged(Instruction),
 // The symbol that is in thep process of being defined.
 define_context: []const u8,
-internal_define_symbol: InternedSymbol,
-def_symbol: InternedSymbol,
-defun_symbol: InternedSymbol,
-lambda_symbol: InternedSymbol,
+internal_define_symbol: Val.InternedSymbol,
+def_symbol: Val.InternedSymbol,
+defun_symbol: Val.InternedSymbol,
+lambda_symbol: Val.InternedSymbol,
 
 pub fn init(vm: *Vm) !Compiler {
     return Compiler{
@@ -94,13 +91,9 @@ fn macroExpandSubexpressions(self: *Compiler, ast: Val) Error!?Val {
         }
     }
     if (expandedExpr) |v| {
-        const list_val = try self.vm.env.objects.put(
-            ListVal,
-            self.allocator(),
-            ListVal{ .list = v },
-        );
+        const list_val = try Val.fromList(self.vm, v);
         expandedExpr = null;
-        return list_val.toVal();
+        return list_val;
     }
     return null;
 }
@@ -126,25 +119,18 @@ fn macroExpandDefun(self: *Compiler, ast: Val) !?Val {
         lambda_expr.appendAssumeCapacity(self.lambda_symbol.toVal());
         lambda_expr.appendAssumeCapacity(args);
         lambda_expr.appendSliceAssumeCapacity(body);
-        const lambda_expr_val = try self.vm.env.objects.put(
-            ListVal,
-            self.allocator(),
-            ListVal{
-                .list = try lambda_expr.toOwnedSlice(self.allocator()),
+        const lambda_expr_val = try Val.fromOwnedList(
+            self.vm,
+            try lambda_expr.toOwnedSlice(self.allocator()),
+        );
+        return try Val.fromList(
+            self.vm,
+            &[_]Val{
+                self.internal_define_symbol.toVal(),
+                name.quoted().toVal(),
+                lambda_expr_val,
             },
         );
-        const new_expr = try self.vm.env.objects.put(
-            ListVal,
-            self.allocator(),
-            ListVal{
-                .list = try self.allocator().dupe(Val, &[3]Val{
-                    self.internal_define_symbol.toVal(),
-                    name.quoted().toVal(),
-                    lambda_expr_val.toVal(),
-                }),
-            },
-        );
-        return new_expr.toVal();
     }
     return null;
 }
@@ -160,23 +146,20 @@ fn macroExpandDef(self: *Compiler, ast: Val) !?Val {
             return Error.BadDefine;
         }
         const symbol = if (expr[1].asInternedSymbol()) |x| x.quoted() else return Error.ExpectedIdentifier;
-        const new_expr = try self.vm.env.objects.put(ListVal, self.allocator(), ListVal{
-            .list = try self.allocator().dupe(Val, &[3]Val{
-                self.internal_define_symbol.toVal(),
-                symbol.toVal(),
-                expr[2],
-            }),
+        return try Val.fromList(self.vm, &[3]Val{
+            self.internal_define_symbol.toVal(),
+            symbol.toVal(),
+            expr[2],
         });
-        return new_expr.toVal();
     }
     return null;
 }
 
 fn compileOne(self: *Compiler, ast: Val) Error!void {
     const expanded_ast = if (try self.macroExpand(ast)) |v| v else ast;
-    switch (expanded_ast) {
+    switch (expanded_ast.repr) {
         .list => |list_id| {
-            const list = self.vm.env.objects.get(ListVal, list_id);
+            const list = self.vm.env.objects.get(Val.List, list_id);
             try self.compileTree(list.?.list);
         },
         .symbol => |symbol| {
@@ -190,12 +173,7 @@ fn compileOne(self: *Compiler, ast: Val) Error!void {
             try self.instructions.append(
                 self.allocator(),
                 Instruction{
-                    .push = Val{
-                        .symbol = InternedSymbol{
-                            .quotes = symbol.quotes - 1,
-                            .id = symbol.id,
-                        },
-                    },
+                    .push = Val.fromInternedSymbol(.{ .quotes = symbol.quotes - 1, .id = symbol.id }),
                 },
             );
         },
@@ -246,11 +224,11 @@ fn compileLambda(self: *Compiler, args: []const Val, exprs: []const Val) !void {
     }
     var lambda_compiler = try Compiler.init(self.vm);
     try lambda_compiler.compileMultiExprs(exprs);
-    const bytecode = ByteCodeFunction{
+    const bytecode = Val.ByteCodeFunction{
         .name = try self.allocator().dupe(u8, self.define_context),
         .instructions = try lambda_compiler.ownedInstructions(),
     };
-    const bytecode_id = try self.vm.env.objects.put(ByteCodeFunction, self.allocator(), bytecode);
+    const bytecode_id = try self.vm.env.objects.put(Val.ByteCodeFunction, self.allocator(), bytecode);
     try self.instructions.append(
         self.allocator(),
         Instruction{ .push = bytecode_id.toVal() },
