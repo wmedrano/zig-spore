@@ -62,9 +62,9 @@ fn plusImpl(vm: *Vm) Val.FunctionError!Val {
     }
     if (has_float) {
         const int_sum_as_float: f64 = @floatFromInt(int_sum);
-        return Val.fromFloat(float_sum + int_sum_as_float);
+        return Val.fromZig(f64, vm, float_sum + int_sum_as_float);
     }
-    return Val.fromInt(int_sum);
+    return Val.fromZig(i64, vm, int_sum);
 }
 
 fn strLenImpl(vm: *Vm) Val.FunctionError!Val {
@@ -73,7 +73,7 @@ fn strLenImpl(vm: *Vm) Val.FunctionError!Val {
         return Val.FunctionError.WrongArity;
     }
     const str = if (args[0].asString(vm.*)) |s| s else return Val.FunctionError.WrongType;
-    return Val.fromInt(@intCast(str.len));
+    return Val.fromZig(i64, vm, @intCast(str.len));
 }
 
 fn strToSexpsImpl(vm: *Vm) Val.FunctionError!Val {
@@ -87,7 +87,7 @@ fn strToSexpsImpl(vm: *Vm) Val.FunctionError!Val {
         try vm.pushStackVal(ast.expr);
     }
     const exprs = vm.localStack()[1..];
-    return Val.fromList(vm, exprs);
+    return Val.fromZig([]const Val, vm, exprs);
 }
 
 fn strToSexpImpl(vm: *Vm) Val.FunctionError!Val {
@@ -103,7 +103,7 @@ test "str-len returns string length" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try std.testing.expectEqual(
-        Val.fromInt(4),
+        Val.fromZig(i64, &vm, 4),
         try vm.evalStr("(str-len \"1234\")"),
     );
 }

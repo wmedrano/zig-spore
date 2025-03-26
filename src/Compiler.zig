@@ -93,7 +93,7 @@ fn macroExpandSubexpressions(self: *Compiler, ast: Val) Error!?Val {
         }
     }
     if (expandedExpr) |v| {
-        const list_val = try Val.fromList(self.vm, v);
+        const list_val = try Val.fromZig([]const Val, self.vm, v);
         expandedExpr = null;
         return list_val;
     }
@@ -125,7 +125,8 @@ fn macroExpandDefun(self: *Compiler, ast: Val) !?Val {
             self.vm,
             try lambda_expr.toOwnedSlice(self.allocator()),
         );
-        return try Val.fromList(
+        return try Val.fromZig(
+            []const Val,
             self.vm,
             &[_]Val{
                 self.internal_define_symbol.toVal(),
@@ -148,7 +149,7 @@ fn macroExpandDef(self: *Compiler, ast: Val) !?Val {
             return Error.BadDefine;
         }
         const symbol = if (expr[1].asInternedSymbol()) |x| x.quoted() else return Error.ExpectedIdentifier;
-        return try Val.fromList(self.vm, &[3]Val{
+        return try Val.fromZig([]const Val, self.vm, &[3]Val{
             self.internal_define_symbol.toVal(),
             symbol.toVal(),
             expr[2],
@@ -175,7 +176,11 @@ fn compileOne(self: *Compiler, ast: Val) Error!void {
             try self.instructions.append(
                 self.allocator(),
                 Instruction{
-                    .push = Val.fromInternedSymbol(.{ .quotes = symbol.quotes - 1, .id = symbol.id }),
+                    .push = try Val.fromZig(
+                        Val.InternedSymbol,
+                        self.vm,
+                        .{ .quotes = symbol.quotes - 1, .id = symbol.id },
+                    ),
                 },
             );
         },

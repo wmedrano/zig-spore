@@ -35,7 +35,7 @@ pub fn next(self: *AstBuilder) Error!?Ast {
     const start = next_token.location.start;
     switch (next_token.token_type) {
         Tokenizer.TokenType.OpenParen => {
-            const expr = try ownedSliceToVal(self.vm, try self.parseList());
+            const expr = try Val.fromOwnedList(self.vm, try self.parseList());
             return Ast{
                 .location = Tokenizer.Span{ .start = start, .end = self.tokenizer.next_idx },
                 .expr = expr,
@@ -59,7 +59,7 @@ fn parseList(self: *AstBuilder) Error![]Val {
     while (self.tokenizer.next()) |token| {
         switch (token.token_type) {
             Tokenizer.TokenType.OpenParen => {
-                const sub_expr = try ownedSliceToVal(self.vm, try self.parseList());
+                const sub_expr = try Val.fromOwnedList(self.vm, try self.parseList());
                 try list.append(self.vm.allocator(), sub_expr);
             },
             Tokenizer.TokenType.CloseParen => return list.toOwnedSlice(self.vm.allocator()),
@@ -72,31 +72,26 @@ fn parseList(self: *AstBuilder) Error![]Val {
     return list.toOwnedSlice(self.vm.allocator());
 }
 
-fn ownedSliceToVal(vm: *Vm, slice: []Val) Error!Val {
-    return Val.fromOwnedList(vm, slice);
-}
-
 fn atomToVal(vm: *Vm, atom: []const u8) Error!Val {
     if (atom.len == 0) {
         return error.EmptyAtom;
     }
     if (std.mem.eql(u8, atom, "true")) {
-        return Val.fromBool(true);
+        return Val.fromZig(bool, vm, true);
     }
     if (std.mem.eql(u8, atom, "false")) {
-        return Val.fromBool(true);
+        return Val.fromZig(bool, vm, true);
     }
     if (atom[0] == '\"') {
         return stringAtomToVal(vm, atom);
     }
     if (std.fmt.parseInt(i64, atom, 10)) |x| {
-        return Val.fromInt(x);
+        return Val.fromZig(i64, vm, x);
     } else |_| {}
     if (std.fmt.parseFloat(f64, atom)) |x| {
-        return Val.fromFloat(x);
+        return Val.fromZig(f64, vm, x);
     } else |_| {}
-    const symbol = try Symbol.fromStr(atom);
-    return Val.fromSymbol(vm, symbol);
+    return Val.fromSymbolStr(vm, atom);
 }
 
 fn stringAtomToVal(vm: *Vm, atom: []const u8) Error!Val {
@@ -124,6 +119,6 @@ fn stringAtomToVal(vm: *Vm, atom: []const u8) Error!Val {
     if (escaped) {
         return error.BadString;
     }
-    const s = try ret.toOwnedSlice(vm.allocator());
-    return Val.fromOwnedString(vm, s);
+    // TODO: Use the owned value of ret.items to avoid allocation.
+    return Val.fromZig([]const u8, vm, ret.items);
 }

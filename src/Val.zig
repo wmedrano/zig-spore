@@ -9,7 +9,14 @@ const Val = @This();
 
 repr: ValRepr,
 
-pub const FunctionError = error{ WrongArity, WrongType, BadArg, StackOverflow } || @import("AstBuilder.zig").Error || std.mem.Allocator.Error;
+pub const FunctionError = error{
+    BadArg,
+    NotImplemented,
+    ObjectNotFound,
+    StackOverflow,
+    WrongArity,
+    WrongType,
+} || @import("AstBuilder.zig").Error || std.mem.Allocator.Error;
 
 pub const ValTag = enum {
     void,
@@ -40,49 +47,48 @@ pub fn init() Val {
     return .{ .repr = .{ .void = {} } };
 }
 
-pub fn fromBool(b: bool) Val {
-    return .{ .repr = .{ .bool = b } };
+/// Convert from a Zig value to a Spore `Val`.
+///
+/// Supported Types:
+/// - `bool` - Converts to a `Val.bool`.
+/// - `i64` - Converts to a `Val.int`.
+/// - `f64` - Converts to a `Val.float`.
+/// - `[]const u8` - Creates a new `Val.string` by copying the slice
+///     contents.
+/// - `Symbol` - Converts to a `Val.symbol`.
+/// - `InternedSymbol` - Converts to a `Val.symbol`.
+/// - `[]const Val` - Converts to a `Val.list`.
+pub fn fromZig(comptime T: type, vm: *Vm, val: T) !Val {
+    switch (T) {
+        bool => return .{ .repr = .{ .bool = val } },
+        i64 => return .{ .repr = .{ .int = val } },
+        f64 => return .{ .repr = .{ .float = val } },
+        []const u8 => {
+            const owned_string = try vm.allocator().dupe(u8, val);
+            const id = try vm.objects.put(String, vm.allocator(), .{ .string = owned_string });
+            return .{ .repr = .{ .string = id } };
+        },
+        Symbol => {
+            const interned_symbol = try InternedSymbol.fromSymbol(vm, val);
+            return interned_symbol.toVal();
+        },
+        InternedSymbol => return val.toVal(),
+        []const Val => {
+            const owned_list = try vm.allocator().dupe(Val, val);
+            return fromOwnedList(vm, owned_list);
+        },
+        else => @compileError("fromZig not supported for type " ++ @typeName(T)),
+    }
 }
 
-pub fn fromInt(i: i64) Val {
-    return .{ .repr = .{ .int = i } };
-}
-
-pub fn fromFloat(f: f64) Val {
-    return .{ .repr = .{ .float = f } };
-}
-
-pub fn fromString(vm: *Vm, s: []const u8) !Val {
-    return fromOwnedString(vm, try vm.allocator().dupe(u8, s));
-}
-
-pub fn fromOwnedString(vm: *Vm, s: []const u8) !Val {
-    const id = try vm.objects.put(String, vm.allocator(), .{ .string = s });
-    return .{ .repr = .{ .string = id } };
-}
-
-pub fn fromList(vm: *Vm, list: []const Val) !Val {
-    const cloned_list = try vm.allocator().dupe(Val, list);
-    return Val.fromOwnedList(vm, cloned_list);
-}
-
-pub fn fromOwnedList(vm: *Vm, list: []Val) !Val {
-    const id = try vm.objects.put(List, vm.allocator(), .{ .list = list });
+pub fn fromOwnedList(vm: *Vm, owned_list: []Val) !Val {
+    const id = try vm.objects.put(List, vm.allocator(), .{ .list = owned_list });
     return .{ .repr = .{ .list = id } };
-}
-
-pub fn fromInternedSymbol(s: InternedSymbol) Val {
-    return .{ .repr = .{ .symbol = s } };
-}
-
-pub fn fromSymbol(vm: *Vm, symbol: Symbol) !Val {
-    const interned_symbol = try InternedSymbol.fromSymbol(vm, symbol);
-    return Val.fromInternedSymbol(interned_symbol);
 }
 
 pub fn fromSymbolStr(vm: *Vm, symbol_str: []const u8) !Val {
     const symbol = try Symbol.fromStr(symbol_str);
-    return Val.fromSymbol(vm, symbol);
+    return Val.fromZig(Symbol, vm, symbol);
 }
 
 pub fn asInternedSymbol(self: Val) ?InternedSymbol {
@@ -106,6 +112,7 @@ pub fn asFloat(self: Val) ?f64 {
     }
 }
 
+/// Get the underlying string if `Val` is a string.
 pub fn asString(self: Val, vm: Vm) ?[]const u8 {
     switch (self.repr) {
         .string => |id| {
@@ -116,11 +123,13 @@ pub fn asString(self: Val, vm: Vm) ?[]const u8 {
     }
 }
 
+/// Get the underlying value as a `Symbol`.
 pub fn asSymbol(self: Val, vm: Vm) !?Symbol {
     const symbol = if (self.asInternedSymbol()) |s| s else return null;
     return vm.objects.symbols.internedSymbolToSymbol(symbol);
 }
 
+/// Get the underlying list if `Val` is a list.
 pub fn asList(self: Val, vm: Vm) ?[]const Val {
     switch (self.repr) {
         .list => |id| {
@@ -203,7 +212,7 @@ pub const InternedSymbol = packed struct {
     }
 
     pub fn toVal(self: InternedSymbol) Val {
-        return Val.fromInternedSymbol(self);
+        return .{ .repr = .{ .symbol = self } };
     }
 
     pub fn toSymbol(self: InternedSymbol, vm: Vm) ?Symbol {
