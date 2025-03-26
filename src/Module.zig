@@ -18,28 +18,39 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
 /// - The value pointed to by `function` must outlive the interpretter.
 ///
 /// ```zig
-/// fn add2Impl(vm: *Vm) Val.FunctionError!Val {
-///     const args = vm.localStack();
-///     if (args.len != 1) return Val.FunctionError.WrongArity;
-///     const arg = args[0].asInt();
-///     if (arg == null) return Val.FunctionError.WrongType;
-///     return Val.fromInt(2 + arg.?);
-/// }
+/// const Add2Fn = struct {
+///     pub const name = "add-2";
+///     pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+///         const args = vm.localStack();
+///         if (args.len != 1) return Val.FunctionError.WrongArity;
+///         const arg = args[0].asInt();
+///         if (arg == null) return Val.FunctionError.WrongType;
+///         return Val.fromZig(i64, vm, 2 + arg.?);
+///     }
+/// };
 ///
-/// var vm = try Vm.init(.{.allocator = std.testing.allocator});
-/// defer vm.deinit();
-/// try vm.global.registerFunction(&vm, &ADD_2_FN);
-/// try std.testing.expectEqual(
-///     Val.fromInt(10),
-///     try vm.evalStr("(add-2 8)"),
-/// );
+/// test "can eval custom fuction" {
+///     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+///     try vm.global.registerFunction(&vm, Add2Fn);
+///     defer vm.deinit();
+///     try std.testing.expectEqual(
+///         Val.fromZig(i64, &vm, 10),
+///         try vm.evalStr("(add-2 8)"),
+///     );
+/// }
 /// ```
-pub fn registerFunction(self: *Module, vm: *Vm, function: *const Val.FunctionVal) !void {
+pub fn registerFunction(self: *Module, vm: *Vm, comptime function: type) !void {
+    const wrapped_function = struct {
+        const FUNCTION = Val.FunctionVal{
+            .name = function.name,
+            .function = function.fnImpl,
+        };
+    };
     try self.registerValueByName(
         vm,
         function.name,
         .{
-            .repr = .{ .function = function },
+            .repr = .{ .function = &wrapped_function.FUNCTION },
         },
     );
 }

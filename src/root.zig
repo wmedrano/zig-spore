@@ -72,22 +72,20 @@ test "can define with defun" {
     );
 }
 
-fn add2Impl(vm: *Vm) Val.FunctionError!Val {
-    const args = vm.localStack();
-    if (args.len != 1) return Val.FunctionError.WrongArity;
-    const arg = args[0].asInt();
-    if (arg == null) return Val.FunctionError.WrongType;
-    return Val.fromZig(i64, vm, 2 + arg.?);
-}
-
-const ADD_2_FN = Val.FunctionVal{
-    .name = "add-2",
-    .function = &add2Impl,
+const Add2Fn = struct {
+    pub const name = "add-2";
+    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+        const args = vm.localStack();
+        if (args.len != 1) return Val.FunctionError.WrongArity;
+        const arg = args[0].asInt();
+        if (arg == null) return Val.FunctionError.WrongType;
+        return Val.fromZig(i64, vm, 2 + arg.?);
+    }
 };
 
 test "can eval custom fuction" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    try vm.global.registerFunction(&vm, &ADD_2_FN);
+    try vm.global.registerFunction(&vm, Add2Fn);
     defer vm.deinit();
     try std.testing.expectEqual(
         Val.fromZig(i64, &vm, 10),
