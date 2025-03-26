@@ -15,6 +15,6 @@ pub fn putValue(self: *Module, allocator: std.mem.Allocator, symbol: InternedSym
     try self.values.put(allocator, symbol, value);
 }
 
-pub fn getValue(self: *const Module, symbol: InternedSymbol) ?Val {
+pub fn getValue(self: Module, symbol: InternedSymbol) ?Val {
     return self.values.get(symbol);
 }

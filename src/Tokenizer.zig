@@ -48,7 +48,7 @@ pub const Token = struct {
     token_type: TokenType,
     location: Span,
 
-    pub fn text(self: *const Token, source: []const u8) []const u8 {
+    pub fn text(self: Token, source: []const u8) []const u8 {
         return source[self.location.start..self.location.end];
     }
 };
@@ -80,7 +80,7 @@ fn takeIdentifier(self: *Tokenizer) void {
     }
 }
 
-fn isDone(self: *const Tokenizer) bool {
+fn isDone(self: Tokenizer) bool {
     const is_ok = self.next_idx < self.source.len;
     return !is_ok;
 }

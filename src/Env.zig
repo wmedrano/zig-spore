@@ -38,14 +38,14 @@ pub fn pushVal(self: *Env, val: Val) !void {
     }
 }
 
-pub fn topVal(self: *const Env) ?Val {
+pub fn topVal(self: Env) ?Val {
     if (self.stack_len == 0) {
         return null;
     }
     return self.stack[self.stack_len - 1];
 }
 
-pub fn localStack(self: *const Env) []const Val {
+pub fn localStack(self: Env) []const Val {
     const stack_start = if (self.stack_frames.getLastOrNull()) |sf| sf.stack_start else return &[0]Val{};
     return self.stack[stack_start..self.stack_len];
 }
@@ -84,7 +84,7 @@ pub const StackFrame = struct {
     stack_start: usize,
     next_instruction: usize,
 
-    fn isDone(self: *const StackFrame) bool {
+    fn isDone(self: StackFrame) bool {
         const ok = self.next_instruction < self.instructions.len;
         return !ok;
     }

@@ -35,13 +35,13 @@ pub const Val = union(ValTag) {
         }
     }
 
-    pub fn asSymbol(self: Val, vm: *const Vm) !?Symbol {
+    pub fn asSymbol(self: Val, vm: Vm) !?Symbol {
         const symbol = self.asInternedSymbol();
         if (!symbol) return null;
         vm.env.objects.symbols.symbolToStr(symbol.?);
     }
 
-    pub fn asList(self: Val, vm: *const Vm) ?ListVal {
+    pub fn asList(self: Val, vm: Vm) ?ListVal {
         switch (self) {
             .list => |id| {
                 const list = if (vm.env.objects.get(ListVal, id)) |list| list else return null;
@@ -91,7 +91,7 @@ pub const ListVal = struct {
         }
     }
 
-    pub fn markChildren(self: *const ListVal, obj: *ObjectManager) void {
+    pub fn markChildren(self: ListVal, obj: *ObjectManager) void {
         for (self.list) |v| {
             obj.markReachable(v);
         }
@@ -112,7 +112,7 @@ pub const ByteCodeFunction = struct {
         allocator.free(self.instructions);
     }
 
-    pub fn markChildren(self: *const ByteCodeFunction, obj: *ObjectManager) void {
+    pub fn markChildren(self: ByteCodeFunction, obj: *ObjectManager) void {
         for (self.instructions) |instruction| {
             switch (instruction) {
                 .push => |v| obj.markReachable(v),

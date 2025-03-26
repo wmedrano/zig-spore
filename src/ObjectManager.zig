@@ -27,7 +27,7 @@ pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator,
     return object_storage.put(allocator, val, self.unreachableColor());
 }
 
-pub fn get(self: *const ObjectManager, comptime T: type, id: Id(T)) ?*T {
+pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
     const object_storage = switch (T) {
         ListVal => self.lists,
         ByteCodeFunction => self.bytecode_functions,
@@ -53,7 +53,7 @@ pub fn sweepUnreachable(self: *ObjectManager, allocator: std.mem.Allocator) !voi
     try self.lists.sweepColor(self.unreachableColor(), allocator);
 }
 
-fn unreachableColor(self: *const ObjectManager) Color {
+fn unreachableColor(self: *ObjectManager) Color {
     return otherColor(self.reachable_color);
 }
 
@@ -95,7 +95,7 @@ fn ObjectStorage(comptime T: type) type {
             return id;
         }
 
-        pub fn get(self: *const Self, id: Id(T)) ?*T {
+        pub fn get(self: Self, id: Id(T)) ?*T {
             if (!self.tags.items[id.idx].eql(id.tag)) {
                 return null;
             }

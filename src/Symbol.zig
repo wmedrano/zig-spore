@@ -47,7 +47,7 @@ pub const SymbolTable = struct {
         return id;
     }
 
-    pub fn symbolToStr(self: *const SymbolTable, symbol: InternedSymbol) ?Symbol {
+    pub fn symbolToStr(self: SymbolTable, symbol: InternedSymbol) ?Symbol {
         if (symbol.id < self.size()) {
             return Symbol{
                 .quotes = symbol.quotes,
@@ -57,7 +57,7 @@ pub const SymbolTable = struct {
         return null;
     }
 
-    fn size(self: *const SymbolTable) u32 {
+    fn size(self: SymbolTable) u32 {
         return @intCast(self.symbols.items.len);
     }
 };
