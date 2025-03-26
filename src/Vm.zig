@@ -169,7 +169,7 @@ pub fn pushStackVal(self: *Vm, val: Val) !void {
         self.stack[self.stack_len] = val;
         self.stack_len += 1;
     } else {
-        return error.StackOverflow;
+        return Val.FunctionError.StackOverflow;
     }
 }
 

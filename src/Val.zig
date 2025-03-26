@@ -9,7 +9,7 @@ const Val = @This();
 
 repr: ValRepr,
 
-pub const FunctionError = error{ WrongArity, WrongType, BadArg } || @import("AstBuilder.zig").Error || std.mem.Allocator.Error;
+pub const FunctionError = error{ WrongArity, WrongType, BadArg, StackOverflow } || @import("AstBuilder.zig").Error || std.mem.Allocator.Error;
 
 pub const ValTag = enum {
     void,
@@ -167,7 +167,7 @@ const FormattedVal = struct {
                     if (idx == 0) {
                         try writer.print("{any}", .{v.formatted(self.vm)});
                     } else {
-                        try writer.print(", {any}", .{v.formatted(self.vm)});
+                        try writer.print(" {any}", .{v.formatted(self.vm)});
                     }
                 }
                 try writer.print(")", .{});
