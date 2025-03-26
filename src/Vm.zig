@@ -4,13 +4,12 @@ const testing = std.testing;
 const AstBuilder = @import("AstBuilder.zig");
 const Compiler = @import("Compiler.zig");
 const Instruction = @import("instruction.zig").Instruction;
+const Module = @import("Module.zig");
 const Symbol = @import("Symbol.zig");
+const Val = @import("Val.zig");
 const builtins = @import("builtins.zig");
 
 const ObjectManager = @import("ObjectManager.zig");
-
-pub const Module = @import("Module.zig");
-pub const Val = @import("Val.zig");
 
 const Vm = @This();
 

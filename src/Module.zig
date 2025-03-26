@@ -18,19 +18,19 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
 /// - The value pointed to by `function` must outlive the interpretter.
 ///
 /// ```zig
-/// fn add2Impl(vm: *Vm) Vm.Val.FunctionError!Vm.Val {
+/// fn add2Impl(vm: *Vm) Val.FunctionError!Val {
 ///     const args = vm.localStack();
-///     if (args.len != 1) return Vm.Val.FunctionError.WrongArity;
+///     if (args.len != 1) return Val.FunctionError.WrongArity;
 ///     const arg = args[0].asInt();
-///     if (arg == null) return Vm.Val.FunctionError.WrongType;
-///     return Vm.Val.fromInt(2 + arg.?);
+///     if (arg == null) return Val.FunctionError.WrongType;
+///     return Val.fromInt(2 + arg.?);
 /// }
 ///
 /// var vm = try Vm.init(.{.allocator = std.testing.allocator});
 /// defer vm.deinit();
 /// try vm.global.registerFunction(&vm, &ADD_2_FN);
 /// try std.testing.expectEqual(
-///     Vm.Val.fromInt(10),
+///     Val.fromInt(10),
 ///     try vm.evalStr("(add-2 8)"),
 /// );
 /// ```
