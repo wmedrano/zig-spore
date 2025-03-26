@@ -15,6 +15,14 @@ pub const Ast = struct {
 vm: *Vm,
 tokenizer: Tokenizer,
 
+pub const Error = error{
+    TooManyQuotes,
+    EmptySymbol,
+    EmptyAtom,
+    BadString,
+    UnexpectedCloseParen,
+} || std.mem.Allocator.Error;
+
 pub fn init(vm: *Vm, source: []const u8) AstBuilder {
     return AstBuilder{
         .vm = vm,
@@ -22,7 +30,7 @@ pub fn init(vm: *Vm, source: []const u8) AstBuilder {
     };
 }
 
-pub fn next(self: *AstBuilder) !?Ast {
+pub fn next(self: *AstBuilder) Error!?Ast {
     const next_token: Tokenizer.Token = if (self.tokenizer.next()) |t| t else return null;
     const start = next_token.location.start;
     switch (next_token.token_type) {
@@ -45,7 +53,7 @@ pub fn next(self: *AstBuilder) !?Ast {
     return null;
 }
 
-fn parseList(self: *AstBuilder) ![]Val {
+fn parseList(self: *AstBuilder) Error![]Val {
     var list = std.ArrayListUnmanaged(Val){};
     defer list.deinit(self.vm.allocator());
     while (self.tokenizer.next()) |token| {
@@ -64,11 +72,11 @@ fn parseList(self: *AstBuilder) ![]Val {
     return list.toOwnedSlice(self.vm.allocator());
 }
 
-fn ownedSliceToVal(vm: *Vm, slice: []Val) !Val {
+fn ownedSliceToVal(vm: *Vm, slice: []Val) Error!Val {
     return Val.fromOwnedList(vm, slice);
 }
 
-fn atomToVal(vm: *Vm, atom: []const u8) !Val {
+fn atomToVal(vm: *Vm, atom: []const u8) Error!Val {
     if (atom.len == 0) {
         return error.EmptyAtom;
     }
@@ -91,7 +99,7 @@ fn atomToVal(vm: *Vm, atom: []const u8) !Val {
     return Val.fromSymbol(vm, symbol);
 }
 
-fn stringAtomToVal(vm: *Vm, atom: []const u8) !Val {
+fn stringAtomToVal(vm: *Vm, atom: []const u8) Error!Val {
     if (atom.len < 2) {
         return error.BadString;
     }

@@ -9,7 +9,7 @@ const Val = @This();
 
 repr: ValRepr,
 
-pub const FunctionError = error{ WrongArity, WrongType } || std.mem.Allocator.Error;
+pub const FunctionError = error{ WrongArity, WrongType, BadArg } || @import("AstBuilder.zig").Error || std.mem.Allocator.Error;
 
 pub const ValTag = enum {
     void,
@@ -122,11 +122,11 @@ pub fn asSymbol(self: Val, vm: Vm) !?Symbol {
     vm.objects.symbols.internedSymbolToSymbol(symbol.?);
 }
 
-pub fn asList(self: Val, vm: Vm) ?List {
+pub fn asList(self: Val, vm: Vm) ?[]const Val {
     switch (self.repr) {
         .list => |id| {
             const list = if (vm.objects.get(List, id)) |list| list else return null;
-            return list.*;
+            return list.list;
         },
         else => return null,
     }

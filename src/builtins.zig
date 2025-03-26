@@ -5,7 +5,7 @@ const Vm = @import("Vm.zig");
 pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, &DEFINE_FUNCTION);
     try vm.global.registerFunction(vm, &PLUS_FUNCTION);
-    try vm.global.registerFunction(vm, &STRING_LEN_FUNCTION);
+    try vm.global.registerFunction(vm, &STR_LEN_FUNCTION);
 }
 
 const DEFINE_FUNCTION = Val.FunctionVal{
@@ -18,9 +18,9 @@ const PLUS_FUNCTION = Val.FunctionVal{
     .function = plusImpl,
 };
 
-const STRING_LEN_FUNCTION = Val.FunctionVal{
-    .name = "string-len",
-    .function = stringLenImpl,
+const STR_LEN_FUNCTION = Val.FunctionVal{
+    .name = "str-len",
+    .function = strLenImpl,
 };
 
 fn defineImpl(vm: *Vm) Val.FunctionError!Val {
@@ -55,20 +55,20 @@ fn plusImpl(vm: *Vm) Val.FunctionError!Val {
     return Val.fromInt(int_sum);
 }
 
-fn stringLenImpl(vm: *Vm) Val.FunctionError!Val {
+fn strLenImpl(vm: *Vm) Val.FunctionError!Val {
     const args = vm.localStack();
     if (args.len != 1) {
         return Val.FunctionError.WrongArity;
     }
-    const string = if (args[0].asString(vm.*)) |s| s else return Val.FunctionError.WrongType;
-    return Val.fromInt(@intCast(string.len));
+    const str = if (args[0].asString(vm.*)) |s| s else return Val.FunctionError.WrongType;
+    return Val.fromInt(@intCast(str.len));
 }
 
-test "string-len returns string length" {
+test "str-len returns string length" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try std.testing.expectEqual(
         Val.fromInt(4),
-        try vm.evalStr("(string-len \"1234\")"),
+        try vm.evalStr("(str-len \"1234\")"),
     );
 }
