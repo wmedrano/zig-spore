@@ -143,11 +143,7 @@ pub fn runGc(self: *Vm) !void {
         self.objects.markReachable(v);
     }
     for (self.stack_frames.items) |stack_frame| {
-        const bytecode_function = Val.ByteCodeFunction{
-            .name = "", // Unused
-            .instructions = stack_frame.instructions,
-        };
-        bytecode_function.markChildren(&self.objects);
+        Val.ByteCodeFunction.markInstructions(stack_frame.instructions, &self.objects);
     }
     var globalsIter = self.global.values.valueIterator();
     while (globalsIter.next()) |v| {

@@ -366,7 +366,11 @@ pub const ByteCodeFunction = struct {
     }
 
     pub fn markChildren(self: ByteCodeFunction, obj: *ObjectManager) void {
-        for (self.instructions) |instruction| {
+        markInstructions(self.instructions, obj);
+    }
+
+    pub fn markInstructions(instructions: []const Instruction, obj: *ObjectManager) void {
+        for (instructions) |instruction| {
             switch (instruction) {
                 .push => |v| obj.markReachable(v),
                 .eval => {},
