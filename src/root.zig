@@ -24,7 +24,7 @@ test "eval can return symbol" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     const actual = try vm.evalStr("'+");
-    try std.testing.expectEqual((try vm.newSymbol("+")).toVal(), actual);
+    try std.testing.expectEqual(try Vm.Val.fromSymbolStr(&vm, "+"), actual);
 }
 
 test "eval multiple constants returns last constant" {
@@ -70,7 +70,7 @@ test "can define with defun" {
 }
 
 fn add2Impl(vm: *Vm) Vm.Val.FunctionError!Vm.Val {
-    const args = vm.env.localStack();
+    const args = vm.localStack();
     if (args.len != 1) return Vm.Val.FunctionError.WrongArity;
     const arg = args[0].asInt();
     if (arg == null) return Vm.Val.FunctionError.WrongType;
@@ -84,7 +84,7 @@ const ADD_2_FN = Vm.Val.FunctionVal{
 
 test "can eval custom fuction" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    try vm.env.global.registerFunction(&vm, &ADD_2_FN);
+    try vm.global.registerFunction(&vm, &ADD_2_FN);
     defer vm.deinit();
     try std.testing.expectEqual(
         Vm.Val.fromInt(10),

@@ -4,20 +4,27 @@ const Val = @import("Val.zig");
 
 const Symbol = @This();
 
+pub const FromStrError = error{ TooManyQuotes, EmptySymbol };
+
 quotes: u2,
 name: []const u8,
 
-pub fn init(str: []const u8) !Symbol {
+/// Create a new symbol from a string.
+///
+/// Any leading `'` are parsed as quotes.
+pub fn fromStr(str: []const u8) FromStrError!Symbol {
     var quotes: usize = 0;
     while (quotes < str.len and str[quotes] == '\'') {
         quotes += 1;
     }
     if (quotes > std.math.maxInt(u2)) {
-        return error.TooManyQuotes;
+        return FromStrError.TooManyQuotes;
     }
+    const name = str[quotes..];
+    if (name.len == 0) return FromStrError.EmptySymbol;
     return Symbol{
         .quotes = @intCast(quotes),
-        .name = str[quotes..],
+        .name = name,
     };
 }
 
@@ -47,7 +54,7 @@ pub const SymbolTable = struct {
         return id;
     }
 
-    pub fn symbolToStr(self: SymbolTable, symbol: Val.InternedSymbol) ?Symbol {
+    pub fn internedSymbolToSymbol(self: SymbolTable, symbol: Val.InternedSymbol) ?Symbol {
         if (symbol.id < self.size()) {
             return Symbol{
                 .quotes = symbol.quotes,
@@ -76,15 +83,15 @@ fn countQuotes(s: []const u8) u2 {
 test "symbols from different but equivalent strings are bitwise equal" {
     var symbol_table = SymbolTable{};
     defer symbol_table.deinit(std.testing.allocator);
-    const symbol_1 = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.init("symbol"));
-    const symbol_2 = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.init("symbol"));
+    const symbol_1 = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.fromStr("symbol"));
+    const symbol_2 = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.fromStr("symbol"));
     try std.testing.expectEqual(symbol_1, symbol_2);
 }
 
 test "symbol can be converted to str" {
     var symbol_table = SymbolTable{};
     defer symbol_table.deinit(std.testing.allocator);
-    const symbol = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.init("symbol"));
-    const actual = symbol_table.symbolToStr(symbol).?;
-    try std.testing.expectEqualDeep(Symbol.init("symbol"), actual);
+    const symbol = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.fromStr("symbol"));
+    const actual = symbol_table.internedSymbolToSymbol(symbol).?;
+    try std.testing.expectEqualDeep(Symbol.fromStr("symbol"), actual);
 }

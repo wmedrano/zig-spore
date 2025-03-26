@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Symbol = @import("Symbol.zig");
 const Tokenizer = @import("Tokenizer.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
@@ -80,5 +81,6 @@ fn identifierToVal(vm: *Vm, identifier: []const u8) !Val {
     if (std.fmt.parseFloat(f64, identifier)) |x| {
         return Val.fromFloat(x);
     } else |_| {}
-    return (try vm.newSymbol(identifier)).toVal();
+    const symbol = try Symbol.fromStr(identifier);
+    return Val.fromSymbol(vm, symbol);
 }

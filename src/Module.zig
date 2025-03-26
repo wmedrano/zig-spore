@@ -19,7 +19,7 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
 ///
 /// ```zig
 /// fn add2Impl(vm: *Vm) Vm.Val.FunctionError!Vm.Val {
-///     const args = vm.env.localStack();
+///     const args = vm.localStack();
 ///     if (args.len != 1) return Vm.Val.FunctionError.WrongArity;
 ///     const arg = args[0].asInt();
 ///     if (arg == null) return Vm.Val.FunctionError.WrongType;
@@ -28,7 +28,7 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
 ///
 /// var vm = try Vm.init(.{.allocator = std.testing.allocator});
 /// defer vm.deinit();
-/// try vm.env.global.registerFunction(&vm, &ADD_2_FN);
+/// try vm.global.registerFunction(&vm, &ADD_2_FN);
 /// try std.testing.expectEqual(
 ///     Vm.Val.fromInt(10),
 ///     try vm.evalStr("(add-2 8)"),
@@ -45,7 +45,7 @@ pub fn registerFunction(self: *Module, vm: *Vm, function: *const Val.FunctionVal
 }
 
 pub fn registerValueByName(self: *Module, vm: *Vm, name: []const u8, value: Val) !void {
-    const symbol = try vm.env.objects.symbols.strToSymbol(
+    const symbol = try vm.objects.symbols.strToSymbol(
         vm.allocator(),
         Symbol{ .quotes = 0, .name = name },
     );

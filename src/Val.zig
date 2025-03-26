@@ -44,7 +44,7 @@ pub fn fromList(vm: *Vm, list: []const Val) !Val {
 }
 
 pub fn fromOwnedList(vm: *Vm, list: []Val) !Val {
-    const id = try vm.env.objects.put(List, vm.allocator(), .{ .list = list });
+    const id = try vm.objects.put(List, vm.allocator(), .{ .list = list });
     return .{ .repr = .{ .list = id } };
 }
 
@@ -62,6 +62,16 @@ pub fn fromFloat(f: f64) Val {
 
 pub fn fromInternedSymbol(s: InternedSymbol) Val {
     return .{ .repr = .{ .symbol = s } };
+}
+
+pub fn fromSymbol(vm: *Vm, symbol: Symbol) !Val {
+    const interned_symbol = try InternedSymbol.fromSymbol(vm, symbol);
+    return Val.fromInternedSymbol(interned_symbol);
+}
+
+pub fn fromSymbolStr(vm: *Vm, symbol_str: []const u8) !Val {
+    const symbol = try Symbol.fromStr(symbol_str);
+    return Val.fromSymbol(vm, symbol);
 }
 
 pub fn asInternedSymbol(self: Val) ?InternedSymbol {
@@ -88,13 +98,13 @@ pub fn asFloat(self: Val) ?f64 {
 pub fn asSymbol(self: Val, vm: Vm) !?Symbol {
     const symbol = self.asInternedSymbol();
     if (!symbol) return null;
-    vm.env.objects.symbols.symbolToStr(symbol.?);
+    vm.objects.symbols.internedSymbolToSymbol(symbol.?);
 }
 
 pub fn asList(self: Val, vm: Vm) ?List {
     switch (self.repr) {
         .list => |id| {
-            const list = if (vm.env.objects.get(List, id)) |list| list else return null;
+            const list = if (vm.objects.get(List, id)) |list| list else return null;
             return list.*;
         },
         else => return null,
@@ -105,12 +115,27 @@ pub const InternedSymbol = packed struct {
     quotes: u2,
     id: u30,
 
+    pub fn fromSymbolStr(vm: *Vm, symbol_str: []const u8) !InternedSymbol {
+        return InternedSymbol.fromSymbol(vm, try Symbol.fromStr(symbol_str));
+    }
+
+    pub fn fromSymbol(vm: *Vm, symbol: Symbol) !InternedSymbol {
+        return try vm.objects.symbols.strToSymbol(
+            vm.allocator(),
+            symbol,
+        );
+    }
+
     pub fn eql(self: InternedSymbol, other: InternedSymbol) bool {
         return self.quotes == other.quotes and self.id == other.id;
     }
 
     pub fn toVal(self: InternedSymbol) Val {
         return Val.fromInternedSymbol(self);
+    }
+
+    pub fn toSymbol(self: InternedSymbol, vm: Vm) ?Symbol {
+        return vm.objects.symbols.internedSymbolToSymbol(self);
     }
 
     pub fn quoted(self: InternedSymbol) InternedSymbol {

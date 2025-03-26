@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 const Instruction = @import("instruction.zig").Instruction;
+const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
@@ -14,7 +15,7 @@ const Error = error{
     NotImplemented,
     TooManyQuotes,
     UnexpectedEmptyExpression,
-} || Allocator.Error;
+} || Symbol.FromStrError || Allocator.Error;
 
 vm: *Vm,
 instructions: std.ArrayListUnmanaged(Instruction),
@@ -30,10 +31,10 @@ pub fn init(vm: *Vm) !Compiler {
         .vm = vm,
         .instructions = .{},
         .define_context = "",
-        .internal_define_symbol = (try vm.newSymbol("%define")),
-        .def_symbol = (try vm.newSymbol("def")),
-        .defun_symbol = (try vm.newSymbol("defun")),
-        .lambda_symbol = (try vm.newSymbol("lambda")),
+        .internal_define_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "%define"),
+        .def_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "def"),
+        .defun_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "defun"),
+        .lambda_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "lambda"),
     };
 }
 
@@ -159,7 +160,7 @@ fn compileOne(self: *Compiler, ast: Val) Error!void {
     const expanded_ast = if (try self.macroExpand(ast)) |v| v else ast;
     switch (expanded_ast.repr) {
         .list => |list_id| {
-            const list = self.vm.env.objects.get(Val.List, list_id);
+            const list = self.vm.objects.get(Val.List, list_id);
             try self.compileTree(list.?.list);
         },
         .symbol => |symbol| {
@@ -202,10 +203,16 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
             if (nodes[1].asInternedSymbol()) |s| {
                 const old_context = self.define_context;
                 defer self.define_context = old_context;
-                self.define_context = if (self.vm.env.objects.symbols.symbolToStr(s)) |name|
-                    name.name
-                else
-                    "";
+                self.define_context = blk: {
+                    if (s.toSymbol(self.vm.*)) |name| {
+                        if (name.quotes > 1) {
+                            return Error.TooManyQuotes;
+                        }
+                        break :blk name.name;
+                    } else {
+                        break :blk "";
+                    }
+                };
             }
         }
     }
@@ -228,7 +235,7 @@ fn compileLambda(self: *Compiler, args: []const Val, exprs: []const Val) !void {
         .name = try self.allocator().dupe(u8, self.define_context),
         .instructions = try lambda_compiler.ownedInstructions(),
     };
-    const bytecode_id = try self.vm.env.objects.put(Val.ByteCodeFunction, self.allocator(), bytecode);
+    const bytecode_id = try self.vm.objects.put(Val.ByteCodeFunction, self.allocator(), bytecode);
     try self.instructions.append(
         self.allocator(),
         Instruction{ .push = bytecode_id.toVal() },
