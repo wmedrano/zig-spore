@@ -115,6 +115,16 @@ pub fn evalStr(self: *Vm, source: []const u8) !Val {
     return ret;
 }
 
+fn run(self: *Vm) !Val {
+    var return_value = Val.init();
+    while (self.nextInstruction()) |instruction| {
+        if (try instruction.execute(self)) |v| {
+            return_value = v;
+        }
+    }
+    return return_value;
+}
+
 /// Release all allocated memory.
 pub fn deinit(self: *Vm) void {
     self.objects.deinit(self.allocator());
@@ -144,19 +154,6 @@ pub fn runGc(self: *Vm) !void {
     try self.objects.sweepUnreachable(self.allocator());
 }
 
-fn run(self: *Vm) !Val {
-    var return_value = Val.init();
-    while (self.nextInstruction()) |instruction| {
-        switch (instruction) {
-            .push => |val| try self.executePush(val),
-            .eval => |n| try self.executeEval(n),
-            .deref => |symbol| try self.executeDeref(symbol),
-            .ret => return_value = try self.executeRet(),
-        }
-    }
-    return return_value;
-}
-
 /// Get the values in the current function call's stack.
 ///
 /// On a fresh function call, this is equivalent to getting the
@@ -167,60 +164,8 @@ pub fn localStack(self: *Vm) []Val {
     return self.stack[stack_start..self.stack_len];
 }
 
-fn executePush(self: *Vm, val: Val) !void {
-    try self.pushStackVal(val);
-}
-
-fn executeEval(self: *Vm, n: usize) !void {
-    const function_idx = self.stack_len - n;
-    const stack_start = function_idx + 1;
-    const function_val = self.stack[function_idx];
-    switch (function_val.repr) {
-        .function => |f| {
-            try self.pushStackFrame(
-                StackFrame{
-                    .instructions = &[0]Instruction{},
-                    .stack_start = stack_start,
-                    .next_instruction = 0,
-                },
-            );
-            const v = try f.*.function(self);
-            self.stack[function_idx] = v;
-            self.stack_len = function_idx + 1;
-        },
-        .bytecode_function => |bytecode_id| {
-            const bytecode = self.objects.get(Val.ByteCodeFunction, bytecode_id).?;
-            try self.pushStackFrame(
-                StackFrame{
-                    .instructions = bytecode.instructions,
-                    .stack_start = stack_start,
-                    .next_instruction = 0,
-                },
-            );
-        },
-        else => return error.ValueNotCallable,
-    }
-}
-
-fn executeDeref(self: *Vm, symbol: Val.InternedSymbol) !void {
-    const val = if (self.global.getValue(symbol)) |v| v else {
-        if (self.objects.symbols.internedSymbolToSymbol(symbol)) |name| {
-            std.log.err("Symbol {s} not found.\n", .{name.name});
-        } else {
-            std.log.err("Symbol {any} not found.\n", .{symbol.id});
-        }
-        return error.SymbolNotFound;
-    };
-    try self.executePush(val);
-}
-
-fn executeRet(self: *Vm) !Val {
-    const ret = try self.popStackFrame();
-    try self.executePush(ret);
-    return ret;
-}
-
-fn pushStackVal(self: *Vm, val: Val) !void {
+/// Push a new value to the virtual machine's stack.
+pub fn pushStackVal(self: *Vm, val: Val) !void {
     if (self.stack_len < self.stack.len) {
         self.stack[self.stack_len] = val;
         self.stack_len += 1;
@@ -234,11 +179,16 @@ fn resetStacks(self: *Vm) void {
     self.stack_frames.clearRetainingCapacity();
 }
 
-fn pushStackFrame(self: *Vm, stack_frame: StackFrame) !void {
+/// Push a new stack frame to the virtual machine.
+pub fn pushStackFrame(self: *Vm, stack_frame: StackFrame) !void {
     try self.stack_frames.append(self.allocator(), stack_frame);
 }
 
-fn popStackFrame(self: *Vm) !Val {
+/// Pop the current stack frame and get the value at the top of the local stack.
+///
+/// The value at the top of the stack is usually the return value. If
+/// the stack is empty, then a void value is returned.
+pub fn popStackFrame(self: *Vm) !Val {
     const stack_frame = if (self.stack_frames.popOrNull()) |x| x else return error.StackFrameUnderflow;
     const return_value = if (stack_frame.stack_start <= self.stack_len) self.stack[self.stack_len - 1] else Val.init();
     self.stack_len = stack_frame.stack_start;
