@@ -117,9 +117,8 @@ pub fn asString(self: Val, vm: Vm) ?[]const u8 {
 }
 
 pub fn asSymbol(self: Val, vm: Vm) !?Symbol {
-    const symbol = self.asInternedSymbol();
-    if (!symbol) return null;
-    vm.objects.symbols.internedSymbolToSymbol(symbol.?);
+    const symbol = if (self.asInternedSymbol()) |s| s else return null;
+    return vm.objects.symbols.internedSymbolToSymbol(symbol);
 }
 
 pub fn asList(self: Val, vm: Vm) ?[]const Val {
@@ -131,6 +130,58 @@ pub fn asList(self: Val, vm: Vm) ?[]const Val {
         else => return null,
     }
 }
+
+pub fn formatted(self: Val, vm: *const Vm) FormattedVal {
+    return FormattedVal{ .val = self, .vm = vm };
+}
+
+const FormattedVal = struct {
+    val: Val,
+    vm: *const Vm,
+
+    pub fn format(
+        self: FormattedVal,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        switch (self.val.repr) {
+            .void => try writer.print("<void>", .{}),
+            .bool => |x| try writer.print("{any}", .{x}),
+            .int => |x| try writer.print("{any}", .{x}),
+            .float => |x| try writer.print("{any}", .{x}),
+            .string => {
+                const string = self.val.asString(self.vm.*).?;
+                try writer.print("\"{s}\"", .{string});
+            },
+            .symbol => {
+                const symbol = self.val.asSymbol(self.vm.*);
+                try writer.print("{any}", .{symbol});
+            },
+            .list => {
+                const list = self.val.asList(self.vm.*).?;
+                try writer.print("(", .{});
+                for (list, 0..list.len) |v, idx| {
+                    if (idx == 0) {
+                        try writer.print("{any}", .{v.formatted(self.vm)});
+                    } else {
+                        try writer.print(", {any}", .{v.formatted(self.vm)});
+                    }
+                }
+                try writer.print(")", .{});
+            },
+            .function => |f| {
+                try writer.print("(native-function {any})", .{f.name});
+            },
+            .bytecode_function => |id| {
+                const f = self.vm.objects.get(ByteCodeFunction, id).?;
+                try writer.print("(function {any})", .{f.name});
+            },
+        }
+    }
+};
 
 pub const InternedSymbol = packed struct {
     quotes: u2,

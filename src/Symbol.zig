@@ -28,6 +28,22 @@ pub fn fromStr(str: []const u8) FromStrError!Symbol {
     };
 }
 
+pub fn format(
+    self: Symbol,
+    comptime fmt: []const u8,
+    options: std.fmt.FormatOptions,
+    writer: anytype,
+) !void {
+    _ = fmt;
+    _ = options;
+    switch (self.quotes) {
+        0 => try writer.print("{s}", .{self.name}),
+        1 => try writer.print("'{s}", .{self.name}),
+        2 => try writer.print("''{s}", .{self.name}),
+        3 => try writer.print("'''{s}", .{self.name}),
+    }
+}
+
 pub const SymbolTable = struct {
     symbols: std.ArrayListUnmanaged([]const u8) = .{},
     name_to_symbol: std.StringHashMapUnmanaged(u30) = .{},
