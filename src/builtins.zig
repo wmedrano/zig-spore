@@ -33,13 +33,11 @@ const PlusFn = struct {
         var float_sum: f64 = 0.0;
         var has_float = false;
         for (vm.localStack()) |v| {
-            if (v.asInt()) |x| {
-                int_sum += x;
-            } else if (v.asFloat()) |x| {
-                has_float = true;
-                float_sum += x;
+            if (v.isInt()) {
+                int_sum += try v.toZig(i64, vm);
             } else {
-                return Val.FunctionError.WrongType;
+                has_float = true;
+                float_sum += try v.toZig(f64, vm);
             }
         }
         if (has_float) {
@@ -57,7 +55,7 @@ const StrLenFn = struct {
         if (args.len != 1) {
             return Val.FunctionError.WrongArity;
         }
-        const str = if (args[0].asString(vm.*)) |s| s else return Val.FunctionError.WrongType;
+        const str = try args[0].toZig([]const u8, vm);
         return Val.fromZig(i64, vm, @intCast(str.len));
     }
 };
@@ -69,7 +67,7 @@ pub const StrToSexpsFn = struct {
         if (args.len != 1) {
             return Val.FunctionError.WrongArity;
         }
-        const str = if (args[0].asString(vm.*)) |s| s else return Val.FunctionError.WrongType;
+        const str = try args[0].toZig([]const u8, vm);
         var ast_builder = @import("AstBuilder.zig").init(vm, str);
         while (try ast_builder.next()) |ast| {
             try vm.pushStackVal(ast.expr);
@@ -82,7 +80,7 @@ pub const StrToSexpsFn = struct {
 pub const StrToSexpFn = struct {
     pub const name = "str->sexp";
     pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
-        const exprs = (try StrToSexpsFn.fnImpl(vm)).asList(vm.*).?;
+        const exprs = try (try StrToSexpsFn.fnImpl(vm)).toZig([]const Val, vm);
         switch (exprs.len) {
             0 => return Val.init(),
             1 => return exprs[0],
@@ -95,8 +93,8 @@ test "str-len returns string length" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try std.testing.expectEqual(
-        Val.fromZig(i64, &vm, 4),
-        try vm.evalStr("(str-len \"1234\")"),
+        4,
+        try vm.evalStr(i64, "(str-len \"1234\")"),
     );
 }
 
@@ -106,6 +104,6 @@ test "str->sexp produces s-expression" {
     try std.testing.expectFmt(
         "(+ 1 (foo 2 3))",
         "{any}",
-        .{(try vm.evalStr("(str->sexp \"   (+ 1 (foo 2 3))    \")")).formatted(&vm)},
+        .{(try vm.evalStr(Val, "(str->sexp \"   (+ 1 (foo 2 3))    \")")).formatted(&vm)},
     );
 }

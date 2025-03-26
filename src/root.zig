@@ -1,3 +1,6 @@
+//! Zig integration for the Spore scripting language.
+//!
+//! The bulk of the work is done by the `Vm` struct.
 pub const Module = @import("Module.zig");
 pub const Symbol = @import("Symbol.zig");
 pub const Val = @import("Val.zig");
@@ -19,56 +22,51 @@ test "can run gc" {
 test "eval constant returns constant" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    const actual = try vm.evalStr("12");
-    try std.testing.expectEqual(Val.fromZig(i64, &vm, 12), actual);
+    const actual = try vm.evalStr(i64, "12");
+    try std.testing.expectEqual(12, actual);
 }
 
 test "eval can return symbol" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    const actual = try vm.evalStr("'+");
+    const actual = try vm.evalStr(Val, "'+");
     try std.testing.expectEqual(try Val.fromSymbolStr(&vm, "+"), actual);
 }
 
 test "eval multiple constants returns last constant" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    const actual = try vm.evalStr("12 true false 4.5");
-    try std.testing.expectEqual(Val.fromZig(f64, &vm, 4.5), actual);
+    const actual = try vm.evalStr(f64, "12 true false 4.5");
+    try std.testing.expectEqual(4.5, actual);
 }
 
 test "can define" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    const define_actual = try vm.evalStr("(def x 12)");
-    try std.testing.expectEqual(Val.init(), define_actual);
-    const get_actual = try vm.evalStr("x");
-    try std.testing.expectEqual(Val.fromZig(i64, &vm, 12), get_actual);
+    try vm.evalStr(void, "(def x 12)");
+    try std.testing.expectEqual(
+        12,
+        try vm.evalStr(i64, "x"),
+    );
 }
 
 test "can run lambda" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
+    try vm.evalStr(void, "(def foo (lambda () (+ 1 2 3)))");
     try std.testing.expectEqual(
-        Val.init(),
-        try vm.evalStr("(def foo (lambda () (+ 1 2 3)))"),
-    );
-    try std.testing.expectEqual(
-        Val.fromZig(i64, &vm, 6),
-        try vm.evalStr("(foo)"),
+        6,
+        try vm.evalStr(i64, "(foo)"),
     );
 }
 
 test "can define with defun" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
+    try vm.evalStr(void, "(defun foo () (+ 1 2 3))");
     try std.testing.expectEqual(
-        Val.init(),
-        try vm.evalStr("(defun foo () (+ 1 2 3))"),
-    );
-    try std.testing.expectEqual(
-        Val.fromZig(i64, &vm, 6),
-        try vm.evalStr("(foo)"),
+        6,
+        try vm.evalStr(i64, "(foo)"),
     );
 }
 
@@ -77,9 +75,8 @@ const Add2Fn = struct {
     pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
         const args = vm.localStack();
         if (args.len != 1) return Val.FunctionError.WrongArity;
-        const arg = args[0].asInt();
-        if (arg == null) return Val.FunctionError.WrongType;
-        return Val.fromZig(i64, vm, 2 + arg.?);
+        const arg = try args[0].toZig(i64, vm);
+        return Val.fromZig(i64, vm, 2 + arg);
     }
 };
 
@@ -88,7 +85,7 @@ test "can eval custom fuction" {
     try vm.global.registerFunction(&vm, Add2Fn);
     defer vm.deinit();
     try std.testing.expectEqual(
-        Val.fromZig(i64, &vm, 10),
-        try vm.evalStr("(add-2 8)"),
+        10,
+        try vm.evalStr(i64, "(add-2 8)"),
     );
 }

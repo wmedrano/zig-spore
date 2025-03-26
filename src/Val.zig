@@ -50,6 +50,8 @@ pub fn init() Val {
 /// Convert from a Zig value to a Spore `Val`.
 ///
 /// Supported Types:
+/// - `Val` - Returns `val` as is.
+/// - `void` - Converts to a `Val.void`.
 /// - `bool` - Converts to a `Val.bool`.
 /// - `i64` - Converts to a `Val.int`.
 /// - `f64` - Converts to a `Val.float`.
@@ -59,7 +61,9 @@ pub fn init() Val {
 /// - `InternedSymbol` - Converts to a `Val.symbol`.
 /// - `[]const Val` - Converts to a `Val.list`.
 pub fn fromZig(comptime T: type, vm: *Vm, val: T) !Val {
+    if (T == Val) return val;
     switch (T) {
+        void => return init(),
         bool => return .{ .repr = .{ .bool = val } },
         i64 => return .{ .repr = .{ .int = val } },
         f64 => return .{ .repr = .{ .float = val } },
@@ -81,6 +85,94 @@ pub fn fromZig(comptime T: type, vm: *Vm, val: T) !Val {
     }
 }
 
+pub const ToZigError = error{
+    WrongType,
+    ObjectNotFound,
+};
+
+/// Convert from a Spore `Val` to a Zig value.
+///
+/// Supported Types `T`:
+/// - `void`
+/// - `bool`
+/// - `i64`
+/// - `f64`
+/// - `[]const u8` (returns a slice pointing to the Val's internal string)
+/// - `Symbol`
+/// - `InternedSymbol`
+/// - `[]const Val` (returns a slice pointing to the Val's internal list)
+///
+/// Note: For slice types (`[]const u8`, `[]const Val`), the returned slice's
+/// lifetime is tied to the underlying object in the Vm's ObjectManager.
+/// The caller must ensure the Vm and its objects outlive the use of the slice.
+pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
+    // Disallow Val -> Val conversion via this function
+    if (T == Val) return self;
+
+    switch (self.repr) {
+        .void => {
+            if (T == void) return;
+            return ToZigError.WrongType;
+        },
+        .bool => |v| {
+            if (T == bool) return v;
+            return ToZigError.WrongType;
+        },
+        .int => |v| {
+            if (T == i64) return v;
+            // TODO: Add explicit conversions for other int types if needed, e.g.:
+            // if (T == i32) return @intCast(i32, v) catch return ToZigError.WrongType;
+            return ToZigError.WrongType;
+        },
+        .float => |v| {
+            if (T == f64) return v;
+            // TODO: Add explicit conversions for f32 if needed.
+            return ToZigError.WrongType;
+        },
+        .string => {
+            if (T == []const u8) {
+                if (self.asString(vm)) |s| {
+                    return s;
+                } else {
+                    // asString returns null if not a string OR if object not found.
+                    // We know it's a string tag, so null means ObjectNotFound.
+                    return ToZigError.ObjectNotFound;
+                }
+            }
+            return ToZigError.WrongType;
+        },
+        .symbol => |interned_symbol| {
+            if (T == InternedSymbol) return interned_symbol;
+            if (T == Symbol) {
+                // Convert InternedSymbol back to Symbol via the interner.
+                const maybe_symbol = vm.objects.symbols.internedSymbolToSymbol(interned_symbol);
+                if (maybe_symbol) |symbol| {
+                    return symbol;
+                } else {
+                    // If internedSymbolToSymbol returns null, the ID was invalid.
+                    // This indicates an internal inconsistency or a stale ID.
+                    return ToZigError.ObjectNotFound; // Treat as object not found.
+                }
+            }
+            return ToZigError.WrongType;
+        },
+        .list => {
+            if (T == []const Val) {
+                if (self.asList(vm.*)) |l| {
+                    return l;
+                }
+                // asList returns null if not a list OR if object not found.
+                // We know it's a list tag, so null means ObjectNotFound.
+                return ToZigError.ObjectNotFound;
+            }
+            // TODO: Handle conversion to owned list ([]Val) if needed (requires allocator).
+            return ToZigError.WrongType;
+        },
+        // Types not generally convertible back to simple Zig types.
+        .function, .bytecode_function => return ToZigError.WrongType,
+    }
+}
+
 pub fn fromOwnedList(vm: *Vm, owned_list: []Val) !Val {
     const id = try vm.objects.put(List, vm.allocator(), .{ .list = owned_list });
     return .{ .repr = .{ .list = id } };
@@ -98,22 +190,15 @@ pub fn asInternedSymbol(self: Val) ?InternedSymbol {
     }
 }
 
-pub fn asInt(self: Val) ?i64 {
+/// Returns true if `Val` is an int.
+pub fn isInt(self: Val) bool {
     switch (self.repr) {
-        .int => |x| return x,
-        else => return null,
+        .int => return true,
+        else => return false,
     }
 }
 
-pub fn asFloat(self: Val) ?f64 {
-    switch (self.repr) {
-        .float => |x| return x,
-        else => return null,
-    }
-}
-
-/// Get the underlying string if `Val` is a string.
-pub fn asString(self: Val, vm: Vm) ?[]const u8 {
+fn asString(self: Val, vm: *const Vm) ?[]const u8 {
     switch (self.repr) {
         .string => |id| {
             const string = if (vm.objects.get(String, id)) |string| string else return null;
@@ -129,8 +214,7 @@ pub fn asSymbol(self: Val, vm: Vm) !?Symbol {
     return vm.objects.symbols.internedSymbolToSymbol(symbol);
 }
 
-/// Get the underlying list if `Val` is a list.
-pub fn asList(self: Val, vm: Vm) ?[]const Val {
+fn asList(self: Val, vm: Vm) ?[]const Val {
     switch (self.repr) {
         .list => |id| {
             const list = if (vm.objects.get(List, id)) |list| list else return null;
@@ -140,6 +224,7 @@ pub fn asList(self: Val, vm: Vm) ?[]const Val {
     }
 }
 
+/// Get a struct that can format `Val`.
 pub fn formatted(self: Val, vm: *const Vm) FormattedVal {
     return FormattedVal{ .val = self, .vm = vm };
 }
@@ -162,7 +247,7 @@ const FormattedVal = struct {
             .int => |x| try writer.print("{any}", .{x}),
             .float => |x| try writer.print("{any}", .{x}),
             .string => {
-                const string = self.val.asString(self.vm.*).?;
+                const string = try self.val.toZig([]const u8, self.vm);
                 try writer.print("\"{s}\"", .{string});
             },
             .symbol => {

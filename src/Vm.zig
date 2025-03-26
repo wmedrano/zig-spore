@@ -88,14 +88,17 @@ pub fn allocator(self: *Vm) std.mem.Allocator {
     return self.options.allocator;
 }
 
-/// Evaluate `source` as Spore code and return the result.
+/// Evaluate `source` as Spore code and return the result as type `T`.
+///
+/// If the return value does not matter, then using `Val` as `T` will
+/// return the raw object without attempting any conversions.
 ///
 /// If `source` contains multiple expressions, then only the last one
 /// is returned.
 ///
 /// Depending on what is inside `Val`, it may only be valid until the
 /// next `Vm.runGc` call.
-pub fn evalStr(self: *Vm, source: []const u8) !Val {
+pub fn evalStr(self: *Vm, T: type, source: []const u8) !T {
     var ast_builder = AstBuilder.init(self, source);
     var compiler = try Compiler.init(self);
     defer compiler.deinit();
@@ -111,7 +114,7 @@ pub fn evalStr(self: *Vm, source: []const u8) !Val {
         try self.stack_frames.append(self.allocator(), stack_frame);
         ret = try self.run();
     }
-    return ret;
+    return ret.toZig(T, self);
 }
 
 fn run(self: *Vm) !Val {
@@ -180,7 +183,10 @@ fn resetStacks(self: *Vm) void {
 
 /// Push a new stack frame to the virtual machine.
 pub fn pushStackFrame(self: *Vm, stack_frame: StackFrame) !void {
-    try self.stack_frames.append(self.allocator(), stack_frame);
+    try self.stack_frames.append(
+        self.allocator(),
+        stack_frame,
+    );
 }
 
 /// Pop the current stack frame and get the value at the top of the local stack.

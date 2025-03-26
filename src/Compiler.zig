@@ -13,8 +13,10 @@ const Error = error{
     BadLambda,
     ExpectedIdentifier,
     NotImplemented,
+    ObjectNotFound,
     TooManyQuotes,
     UnexpectedEmptyExpression,
+    WrongType,
 } || Symbol.FromStrError || Allocator.Error;
 
 vm: *Vm,
@@ -81,7 +83,7 @@ fn macroExpand(self: *Compiler, ast: Val) !?Val {
 }
 
 fn macroExpandSubexpressions(self: *Compiler, ast: Val) Error!?Val {
-    const exprs = if (ast.asList(self.vm.*)) |list| list else return null;
+    const exprs = ast.toZig([]const Val, self.vm) catch return null;
     var expandedExpr: ?[]Val = null;
     defer if (expandedExpr) |v| self.allocator().free(v);
     for (exprs, 0..exprs.len) |sub_expr, idx| {
@@ -101,7 +103,7 @@ fn macroExpandSubexpressions(self: *Compiler, ast: Val) Error!?Val {
 }
 
 fn macroExpandDefun(self: *Compiler, ast: Val) !?Val {
-    const expr = if (ast.asList(self.vm.*)) |list| list else return null;
+    const expr = ast.toZig([]const Val, self.vm) catch return null;
     if (expr.len == 0) {
         return null;
     }
@@ -139,7 +141,7 @@ fn macroExpandDefun(self: *Compiler, ast: Val) !?Val {
 }
 
 fn macroExpandDef(self: *Compiler, ast: Val) !?Val {
-    const expr = if (ast.asList(self.vm.*)) |list| list else return null;
+    const expr = ast.toZig([]const Val, self.vm) catch return null;
     if (expr.len == 0) {
         return null;
     }
@@ -200,7 +202,7 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
             if (nodes.len < 3) {
                 return Error.BadLambda;
             }
-            const args = if (nodes[1].asList(self.vm.*)) |args| args else return Error.BadLambda;
+            const args = nodes[1].toZig([]const Val, self.vm) catch return Error.BadLambda;
             return self.compileLambda(args, nodes[2..]);
         } else if (leading_symbol.eql(self.internal_define_symbol)) {
             if (nodes.len < 2) {
