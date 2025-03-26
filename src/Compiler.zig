@@ -26,6 +26,7 @@ def_symbol: Val.InternedSymbol,
 defun_symbol: Val.InternedSymbol,
 lambda_symbol: Val.InternedSymbol,
 
+/// Initialize a new compiler for a `Vm`.
 pub fn init(vm: *Vm) !Compiler {
     return Compiler{
         .vm = vm,
@@ -47,7 +48,7 @@ pub fn currentExpr(self: *Compiler) []Instruction {
 }
 
 pub fn compile(self: *Compiler, expr: Val) !void {
-    return self.compileMultiExprs(&[1]Val{expr});
+    try self.compileMultiExprs(&[1]Val{expr});
 }
 
 fn compileMultiExprs(self: *Compiler, exprs: []const Val) !void {

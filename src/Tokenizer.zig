@@ -26,9 +26,9 @@ pub fn next(self: *Tokenizer) ?Token {
         },
         else => {
             const start = self.next_idx;
-            self.takeIdentifier();
+            self.takeAtom();
             return Token{
-                .token_type = TokenType.Identifier,
+                .token_type = TokenType.Atom,
                 .location = Span{ .start = start, .end = self.next_idx },
             };
         },
@@ -61,7 +61,7 @@ pub const Span = struct {
 pub const TokenType = enum {
     OpenParen,
     CloseParen,
-    Identifier,
+    Atom,
 };
 
 fn takeWhitespace(self: *Tokenizer) void {
@@ -70,13 +70,35 @@ fn takeWhitespace(self: *Tokenizer) void {
     }
 }
 
-fn takeIdentifier(self: *Tokenizer) void {
+fn takeAtom(self: *Tokenizer) void {
+    const start_idx = self.next_idx;
     while (!self.isDone()) {
         const next_char = self.source[self.next_idx];
-        if (isWhitespace(next_char) or next_char == '(' or next_char == ')') {
+        if (next_char == '"' and start_idx == self.next_idx) {
+            return self.takeString();
+        }
+        if (isWhitespace(next_char) or next_char == '(' or next_char == ')' or next_char == '"') {
             return;
         }
         self.next_idx += 1;
+    }
+}
+
+fn takeString(self: *Tokenizer) void {
+    const start_idx = self.next_idx;
+    var escape_next_char = false;
+    while (!self.isDone()) {
+        const next_char = self.source[self.next_idx];
+        if (escape_next_char) {
+            escape_next_char = false;
+            self.next_idx += 1;
+        } else if (next_char == '"' and start_idx != self.next_idx) {
+            self.next_idx += 1;
+            return;
+        } else {
+            escape_next_char = next_char == '\\';
+            self.next_idx += 1;
+        }
     }
 }
 
@@ -98,15 +120,32 @@ test "empty string is empty" {
 }
 
 test "atoms are returned in order" {
-    var tokenizer = Tokenizer.init("false true 3 4.5");
+    var tokenizer = Tokenizer.init("false true 3 4.5 \"6\"");
     const actual = try tokenizer.toArray(std.testing.allocator);
     defer std.testing.allocator.free(actual);
     try std.testing.expectEqualDeep(&[_]Token{
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 0, .end = 5 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 6, .end = 10 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 11, .end = 12 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 13, .end = 16 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 0, .end = 5 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 6, .end = 10 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 11, .end = 12 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 13, .end = 16 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 17, .end = 20 } },
     }, actual);
+}
+
+test "string quotes are escaped" {
+    var tokenizer = Tokenizer.init(" \"this \\\"word\\\" is quoted\" ");
+    const actual = try tokenizer.toArray(std.testing.allocator);
+    defer std.testing.allocator.free(actual);
+    try std.testing.expectEqualDeep(
+        &[_]Token{
+            Token{ .token_type = TokenType.Atom, .location = Span{ .start = 1, .end = 26 } },
+        },
+        actual,
+    );
+    try std.testing.expectEqualStrings(
+        "\"this \\\"word\\\" is quoted\"",
+        actual[0].text(tokenizer.source),
+    );
 }
 
 test "parenthesis are parsed" {
@@ -115,16 +154,16 @@ test "parenthesis are parsed" {
     defer std.testing.allocator.free(actual);
     try std.testing.expectEqualDeep(&[_]Token{
         Token{ .token_type = TokenType.OpenParen, .location = Span{ .start = 0, .end = 1 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 1, .end = 2 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 3, .end = 4 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 1, .end = 2 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 3, .end = 4 } },
         Token{ .token_type = TokenType.OpenParen, .location = Span{ .start = 5, .end = 6 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 6, .end = 7 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 8, .end = 9 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 10, .end = 11 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 6, .end = 7 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 8, .end = 9 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 10, .end = 11 } },
         Token{ .token_type = TokenType.CloseParen, .location = Span{ .start = 11, .end = 12 } },
         Token{ .token_type = TokenType.CloseParen, .location = Span{ .start = 12, .end = 13 } },
         Token{ .token_type = TokenType.OpenParen, .location = Span{ .start = 13, .end = 14 } },
-        Token{ .token_type = TokenType.Identifier, .location = Span{ .start = 14, .end = 17 } },
+        Token{ .token_type = TokenType.Atom, .location = Span{ .start = 14, .end = 17 } },
         Token{ .token_type = TokenType.CloseParen, .location = Span{ .start = 17, .end = 18 } },
     }, actual);
 }

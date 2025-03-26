@@ -16,6 +16,7 @@ pub const ValTag = enum {
     bool,
     int,
     float,
+    string,
     symbol,
     list,
     function,
@@ -27,6 +28,7 @@ const ValRepr = union(ValTag) {
     bool: bool,
     int: i64,
     float: f64,
+    string: ObjectManager.Id(String),
     symbol: InternedSymbol,
     list: ObjectManager.Id(List),
     function: *const FunctionVal,
@@ -36,16 +38,6 @@ const ValRepr = union(ValTag) {
 /// Initialize a new `Val` to the default `void` value.
 pub fn init() Val {
     return .{ .repr = .{ .void = {} } };
-}
-
-pub fn fromList(vm: *Vm, list: []const Val) !Val {
-    const cloned_list = try vm.allocator().dupe(Val, list);
-    return Val.fromOwnedList(vm, cloned_list);
-}
-
-pub fn fromOwnedList(vm: *Vm, list: []Val) !Val {
-    const id = try vm.objects.put(List, vm.allocator(), .{ .list = list });
-    return .{ .repr = .{ .list = id } };
 }
 
 pub fn fromBool(b: bool) Val {
@@ -58,6 +50,25 @@ pub fn fromInt(i: i64) Val {
 
 pub fn fromFloat(f: f64) Val {
     return .{ .repr = .{ .float = f } };
+}
+
+pub fn fromString(vm: *Vm, s: []const u8) !Val {
+    return fromOwnedString(vm, try vm.allocator().dupe(u8, s));
+}
+
+pub fn fromOwnedString(vm: *Vm, s: []const u8) !Val {
+    const id = try vm.objects.put(String, vm.allocator(), .{ .string = s });
+    return .{ .repr = .{ .string = id } };
+}
+
+pub fn fromList(vm: *Vm, list: []const Val) !Val {
+    const cloned_list = try vm.allocator().dupe(Val, list);
+    return Val.fromOwnedList(vm, cloned_list);
+}
+
+pub fn fromOwnedList(vm: *Vm, list: []Val) !Val {
+    const id = try vm.objects.put(List, vm.allocator(), .{ .list = list });
+    return .{ .repr = .{ .list = id } };
 }
 
 pub fn fromInternedSymbol(s: InternedSymbol) Val {
@@ -91,6 +102,16 @@ pub fn asInt(self: Val) ?i64 {
 pub fn asFloat(self: Val) ?f64 {
     switch (self.repr) {
         .float => |x| return x,
+        else => return null,
+    }
+}
+
+pub fn asString(self: Val, vm: Vm) ?[]const u8 {
+    switch (self.repr) {
+        .string => |id| {
+            const string = if (vm.objects.get(String, id)) |string| string else return null;
+            return string.string;
+        },
         else => return null,
     }
 }
@@ -153,6 +174,19 @@ pub const InternedSymbol = packed struct {
             .id = self.id,
         };
     }
+};
+
+pub const String = struct {
+    string: []const u8,
+
+    pub fn garbageCollect(self: *String, allocator: std.mem.Allocator) void {
+        if (self.string.len > 0) {
+            allocator.free(self.string);
+        }
+        self.string = "";
+    }
+
+    pub fn markChildren(_: String, _: *ObjectManager) void {}
 };
 
 pub const List = struct {

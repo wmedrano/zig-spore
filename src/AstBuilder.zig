@@ -34,8 +34,8 @@ pub fn next(self: *AstBuilder) !?Ast {
             };
         },
         Tokenizer.TokenType.CloseParen => return error.UnexpectedCloseParen,
-        Tokenizer.TokenType.Identifier => {
-            const expr = try identifierToVal(self.vm, next_token.text(self.tokenizer.source));
+        Tokenizer.TokenType.Atom => {
+            const expr = try atomToVal(self.vm, next_token.text(self.tokenizer.source));
             return Ast{
                 .location = Tokenizer.Span{ .start = start, .end = self.tokenizer.next_idx },
                 .expr = expr,
@@ -55,8 +55,8 @@ fn parseList(self: *AstBuilder) ![]Val {
                 try list.append(self.vm.allocator(), sub_expr);
             },
             Tokenizer.TokenType.CloseParen => return list.toOwnedSlice(self.vm.allocator()),
-            Tokenizer.TokenType.Identifier => {
-                const val = try identifierToVal(self.vm, token.text(self.tokenizer.source));
+            Tokenizer.TokenType.Atom => {
+                const val = try atomToVal(self.vm, token.text(self.tokenizer.source));
                 try list.append(self.vm.allocator(), val);
             },
         }
@@ -68,19 +68,54 @@ fn ownedSliceToVal(vm: *Vm, slice: []Val) !Val {
     return Val.fromOwnedList(vm, slice);
 }
 
-fn identifierToVal(vm: *Vm, identifier: []const u8) !Val {
-    if (std.mem.eql(u8, identifier, "true")) {
+fn atomToVal(vm: *Vm, atom: []const u8) !Val {
+    if (atom.len == 0) {
+        return error.EmptyAtom;
+    }
+    if (std.mem.eql(u8, atom, "true")) {
         return Val.fromBool(true);
     }
-    if (std.mem.eql(u8, identifier, "false")) {
+    if (std.mem.eql(u8, atom, "false")) {
         return Val.fromBool(true);
     }
-    if (std.fmt.parseInt(i64, identifier, 10)) |x| {
+    if (atom[0] == '\"') {
+        return stringAtomToVal(vm, atom);
+    }
+    if (std.fmt.parseInt(i64, atom, 10)) |x| {
         return Val.fromInt(x);
     } else |_| {}
-    if (std.fmt.parseFloat(f64, identifier)) |x| {
+    if (std.fmt.parseFloat(f64, atom)) |x| {
         return Val.fromFloat(x);
     } else |_| {}
-    const symbol = try Symbol.fromStr(identifier);
+    const symbol = try Symbol.fromStr(atom);
     return Val.fromSymbol(vm, symbol);
+}
+
+fn stringAtomToVal(vm: *Vm, atom: []const u8) !Val {
+    if (atom.len < 2) {
+        return error.BadString;
+    }
+    if (atom[0] != '"' or atom[atom.len - 1] != '"') {
+        return error.BadString;
+    }
+    var ret = std.ArrayListUnmanaged(u8){};
+    defer ret.deinit(vm.allocator());
+    var escaped = false;
+    for (atom[1 .. atom.len - 1]) |ch| {
+        if (escaped) {
+            escaped = false;
+            try ret.append(vm.allocator(), ch);
+        } else {
+            switch (ch) {
+                '\\' => escaped = true,
+                '"' => return error.BadString,
+                else => try ret.append(vm.allocator(), ch),
+            }
+        }
+    }
+    if (escaped) {
+        return error.BadString;
+    }
+    const s = try ret.toOwnedSlice(vm.allocator());
+    return Val.fromOwnedString(vm, s);
 }

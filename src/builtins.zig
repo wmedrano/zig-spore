@@ -1,9 +1,11 @@
+const std = @import("std");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
 pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, &DEFINE_FUNCTION);
     try vm.global.registerFunction(vm, &PLUS_FUNCTION);
+    try vm.global.registerFunction(vm, &STRING_LEN_FUNCTION);
 }
 
 const DEFINE_FUNCTION = Val.FunctionVal{
@@ -16,13 +18,18 @@ const PLUS_FUNCTION = Val.FunctionVal{
     .function = plusImpl,
 };
 
+const STRING_LEN_FUNCTION = Val.FunctionVal{
+    .name = "string-len",
+    .function = stringLenImpl,
+};
+
 fn defineImpl(vm: *Vm) Val.FunctionError!Val {
-    const local_stack = vm.localStack();
-    if (local_stack.len != 2) {
+    const args = vm.localStack();
+    if (args.len != 2) {
         return Val.FunctionError.WrongArity;
     }
-    const symbol = if (local_stack[0].asInternedSymbol()) |s| s else return Val.FunctionError.WrongType;
-    const value = local_stack[1];
+    const symbol = if (args[0].asInternedSymbol()) |s| s else return Val.FunctionError.WrongType;
+    const value = args[1];
     try vm.global.registerValue(vm, symbol, value);
     return Val.init();
 }
@@ -46,4 +53,22 @@ fn plusImpl(vm: *Vm) Val.FunctionError!Val {
         return Val.fromFloat(float_sum + int_sum_as_float);
     }
     return Val.fromInt(int_sum);
+}
+
+fn stringLenImpl(vm: *Vm) Val.FunctionError!Val {
+    const args = vm.localStack();
+    if (args.len != 1) {
+        return Val.FunctionError.WrongArity;
+    }
+    const string = if (args[0].asString(vm.*)) |s| s else return Val.FunctionError.WrongType;
+    return Val.fromInt(@intCast(string.len));
+}
+
+test "string-len returns string length" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectEqual(
+        Val.fromInt(4),
+        try vm.evalStr("(string-len \"1234\")"),
+    );
 }

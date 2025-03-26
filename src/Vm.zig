@@ -141,7 +141,7 @@ pub fn runGc(self: *Vm) !void {
     }
     for (self.stack_frames.items) |stack_frame| {
         const bytecode_function = Val.ByteCodeFunction{
-            .name = "",
+            .name = "", // Unused
             .instructions = stack_frame.instructions,
         };
         bytecode_function.markChildren(&self.objects);

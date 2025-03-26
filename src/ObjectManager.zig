@@ -6,18 +6,21 @@ const Val = @import("Val.zig");
 const ObjectManager = @This();
 
 symbols: SymbolTable = .{},
+strings: ObjectStorage(Val.String) = .{},
 lists: ObjectStorage(Val.List) = .{},
 bytecode_functions: ObjectStorage(Val.ByteCodeFunction) = .{},
 reachable_color: Color = Color.blue,
 
 pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
     self.symbols.deinit(allocator);
+    self.strings.deinit(allocator);
     self.lists.deinit(allocator);
     self.bytecode_functions.deinit(allocator);
 }
 
 pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator, val: T) !Id(T) {
     var object_storage = switch (T) {
+        Val.String => &self.strings,
         Val.List => &self.lists,
         Val.ByteCodeFunction => &self.bytecode_functions,
         else => @compileError("type not supported"),
@@ -27,6 +30,7 @@ pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator,
 
 pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
     const object_storage = switch (T) {
+        Val.String => self.strings,
         Val.List => self.lists,
         Val.ByteCodeFunction => self.bytecode_functions,
         else => @compileError("type not supported"),
@@ -40,6 +44,7 @@ pub fn markReachable(self: *ObjectManager, val: Val) void {
         .bool => {},
         .int => {},
         .float => {},
+        .string => |id| self.strings.markReachable(id, self),
         .symbol => {},
         .function => {},
         .list => |id| self.lists.markReachable(id, self),
@@ -48,7 +53,9 @@ pub fn markReachable(self: *ObjectManager, val: Val) void {
 }
 
 pub fn sweepUnreachable(self: *ObjectManager, allocator: std.mem.Allocator) !void {
+    try self.strings.sweepColor(self.unreachableColor(), allocator);
     try self.lists.sweepColor(self.unreachableColor(), allocator);
+    try self.bytecode_functions.sweepColor(self.unreachableColor(), allocator);
 }
 
 fn unreachableColor(self: *ObjectManager) Color {
@@ -157,6 +164,7 @@ pub fn Id(comptime T: type) type {
         const Self = @This();
         pub fn toVal(self: Self) Val {
             switch (T) {
+                Val.String => return Val{ .repr = .{ .string = self } },
                 Val.List => return Val{ .repr = .{ .list = self } },
                 Val.ByteCodeFunction => return Val{ .repr = .{ .bytecode_function = self } },
                 else => @compileError("no valid conversion to Val"),
