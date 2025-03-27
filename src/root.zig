@@ -79,11 +79,18 @@ test "can run lambda" {
 test "can define with defun" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try vm.evalStr(void, "(defun foo () (+ 1 2 3))");
+    try vm.evalStr(void, "(defun foo (a b c) (+ a b c))");
     try std.testing.expectEqual(
         6,
-        try vm.evalStr(i64, "(foo)"),
+        try vm.evalStr(i64, "(foo 1 2 3)"),
     );
+}
+
+test "function call with wrong args returns error" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.evalStr(void, "(defun foo (a b c) (+ a b c))");
+    try std.testing.expectError(error.WrongArity, vm.evalStr(i64, "(foo 1 2)"));
 }
 
 const Add2Fn = struct {

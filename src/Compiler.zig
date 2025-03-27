@@ -25,6 +25,7 @@ vm: *Vm,
 instructions: std.ArrayListUnmanaged(Instruction),
 // The symbol that is in thep process of being defined.
 define_context: []const u8,
+locals: std.ArrayListUnmanaged([]const u8),
 internal_define_symbol: Val.InternedSymbol,
 def_symbol: Val.InternedSymbol,
 defun_symbol: Val.InternedSymbol,
@@ -39,6 +40,7 @@ pub fn init(vm: *Vm) !Compiler {
         .vm = vm,
         .instructions = .{},
         .define_context = "",
+        .locals = .{},
         .internal_define_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "%define"),
         .def_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "def"),
         .defun_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "defun"),
@@ -51,6 +53,7 @@ pub fn init(vm: *Vm) !Compiler {
 
 pub fn deinit(self: *Compiler) void {
     self.instructions.deinit(self.allocator());
+    self.locals.deinit(self.allocator());
 }
 
 pub fn currentExpr(self: *Compiler) []Instruction {
@@ -59,6 +62,20 @@ pub fn currentExpr(self: *Compiler) []Instruction {
 
 pub fn compile(self: *Compiler, expr: Val) !void {
     try self.compileMultiExprs(&.{expr});
+}
+
+fn addLocal(self: *Compiler, name: []const u8) !void {
+    try self.locals.append(self.allocator(), name);
+}
+
+fn localIdx(self: *Compiler, name: []const u8) ?u32 {
+    if (self.locals.items.len == 0) return null;
+    var idx = self.locals.items.len;
+    while (idx > 0) {
+        idx -= 1;
+        if (std.mem.eql(u8, self.locals.items[idx], name)) return @intCast(idx);
+    }
+    return null;
 }
 
 fn compileMultiExprs(self: *Compiler, exprs: []const Val) !void {
@@ -193,30 +210,41 @@ fn compileOne(self: *Compiler, unexpanded_ast: Val) Error!void {
             const list = self.vm.objects.get(Val.List, list_id);
             try self.compileTree(list.?.list);
         },
-        .symbol => |symbol| {
-            if (symbol.quotes == 0) {
-                try self.instructions.append(
-                    self.allocator(),
-                    Instruction{ .deref = symbol },
-                );
-                return;
-            }
-            try self.instructions.append(
-                self.allocator(),
-                Instruction{
-                    .push = try Val.fromZig(
-                        Val.InternedSymbol,
-                        self.vm,
-                        .{ .quotes = symbol.quotes - 1, .id = symbol.id },
-                    ),
-                },
-            );
-        },
+        .symbol => |symbol| try self.compileSymbol(symbol),
         else => try self.instructions.append(
             self.allocator(),
             Instruction{ .push = ast },
         ),
     }
+}
+
+fn compileSymbol(self: *Compiler, symbol: Val.InternedSymbol) Error!void {
+    if (symbol.quotes > 0) {
+        try self.instructions.append(
+            self.allocator(),
+            Instruction{
+                .push = try Val.fromZig(
+                    Val.InternedSymbol,
+                    self.vm,
+                    .{ .quotes = symbol.quotes - 1, .id = symbol.id },
+                ),
+            },
+        );
+        return;
+    }
+    if (symbol.toSymbol(self.vm)) |named_symbol| {
+        if (self.localIdx(named_symbol.name)) |idx| {
+            try self.instructions.append(
+                self.allocator(),
+                Instruction{ .get_local = idx },
+            );
+            return;
+        }
+    }
+    try self.instructions.append(
+        self.allocator(),
+        Instruction{ .deref = symbol },
+    );
 }
 
 fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
@@ -292,14 +320,18 @@ fn compileIf(self: *Compiler, pred: Val, true_branch: Val, false_branch: Val) Er
 }
 
 fn compileLambda(self: *Compiler, args: []const Val, exprs: []const Val) !void {
-    if (args.len != 0) {
-        return Error.NotImplemented;
-    }
     var lambda_compiler = try Compiler.init(self.vm);
+    defer lambda_compiler.deinit();
+    for (args) |arg| {
+        const arg_symbol = arg.toZig(Symbol, self.vm) catch return Error.BadLambda;
+        if (arg_symbol.quotes != 0) return Error.BadLambda;
+        try lambda_compiler.addLocal(arg_symbol.name);
+    }
     try lambda_compiler.compileMultiExprs(exprs);
     const bytecode = Val.ByteCodeFunction{
         .name = try self.allocator().dupe(u8, self.define_context),
         .instructions = try lambda_compiler.ownedInstructions(),
+        .args = @intCast(args.len),
     };
     const bytecode_id = try self.vm.objects.put(Val.ByteCodeFunction, self.allocator(), bytecode);
     try self.instructions.append(

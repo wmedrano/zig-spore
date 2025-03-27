@@ -354,6 +354,7 @@ pub const FunctionVal = struct {
 pub const ByteCodeFunction = struct {
     name: []const u8,
     instructions: []const Instruction,
+    args: u32,
 
     pub fn garbageCollect(self: *ByteCodeFunction, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
@@ -369,6 +370,7 @@ pub const ByteCodeFunction = struct {
             switch (instruction) {
                 .push => |v| obj.markReachable(v),
                 .eval => {},
+                .get_local => {},
                 .deref => {},
                 .jump_if => {},
                 .jump => {},

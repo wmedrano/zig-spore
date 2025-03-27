@@ -2,11 +2,20 @@ const std = @import("std");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
-pub const InstructionTag = enum { push, eval, deref, jump_if, jump, ret };
+pub const InstructionTag = enum {
+    push,
+    eval,
+    get_local,
+    deref,
+    jump_if,
+    jump,
+    ret,
+};
 
 pub const Instruction = union(InstructionTag) {
     push: Val,
     eval: u32,
+    get_local: u32,
     deref: Val.InternedSymbol,
     jump_if: u32,
     jump: u32,
@@ -21,6 +30,10 @@ pub const Instruction = union(InstructionTag) {
                 },
                 .eval => |n| {
                     try executeEval(vm, n);
+                    break :blk null;
+                },
+                .get_local => |idx| {
+                    try executeGetLocal(vm, idx);
                     break :blk null;
                 },
                 .deref => |symbol| {
@@ -45,7 +58,9 @@ pub const Instruction = union(InstructionTag) {
         try vm.pushStackVal(val);
     }
 
-    fn executeEval(vm: *Vm, n: usize) !void {
+    fn executeEval(vm: *Vm, n: u32) !void {
+        if (n == 0) return Val.FunctionError.WrongArity;
+        const arg_count = n - 1;
         const function_idx = vm.stack_len - n;
         const stack_start = function_idx + 1;
         const function_val = vm.stack[function_idx];
@@ -53,7 +68,7 @@ pub const Instruction = union(InstructionTag) {
             .function => |f| {
                 try vm.pushStackFrame(
                     Vm.StackFrame{
-                        .instructions = &[0]Instruction{},
+                        .instructions = &.{},
                         .stack_start = stack_start,
                         .next_instruction = 0,
                     },
@@ -64,6 +79,7 @@ pub const Instruction = union(InstructionTag) {
             },
             .bytecode_function => |bytecode_id| {
                 const bytecode = vm.objects.get(Val.ByteCodeFunction, bytecode_id).?;
+                if (bytecode.args != arg_count) return Val.FunctionError.WrongArity;
                 try vm.pushStackFrame(
                     Vm.StackFrame{
                         .instructions = bytecode.instructions,
@@ -74,6 +90,11 @@ pub const Instruction = union(InstructionTag) {
             },
             else => return error.ValueNotCallable,
         }
+    }
+
+    fn executeGetLocal(vm: *Vm, idx: u32) !void {
+        const val = vm.localStack()[idx];
+        try executePush(vm, val);
     }
 
     fn executeDeref(vm: *Vm, symbol: Val.InternedSymbol) !void {
