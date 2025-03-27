@@ -66,10 +66,10 @@ test "can evaluate when" {
     try vm.evalStr(void, "(when false 1 2 3 4)");
 }
 
-test "can run lambda" {
+test "can run function" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try vm.evalStr(void, "(def foo (lambda () (+ 1 2 3)))");
+    try vm.evalStr(void, "(def foo (function () (+ 1 2 3)))");
     try std.testing.expectEqual(
         6,
         try vm.evalStr(i64, "(foo)"),
