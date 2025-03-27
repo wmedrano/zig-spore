@@ -11,6 +11,7 @@ const Compiler = @This();
 const Error = error{
     BadDefine,
     BadIf,
+    BadWhen,
     BadLambda,
     ExpectedIdentifier,
     NotImplemented,
@@ -28,7 +29,9 @@ internal_define_symbol: Val.InternedSymbol,
 def_symbol: Val.InternedSymbol,
 defun_symbol: Val.InternedSymbol,
 lambda_symbol: Val.InternedSymbol,
+do_symbol: Val.InternedSymbol,
 if_symbol: Val.InternedSymbol,
+when_symbol: Val.InternedSymbol,
 
 /// Initialize a new compiler for a `Vm`.
 pub fn init(vm: *Vm) !Compiler {
@@ -40,7 +43,9 @@ pub fn init(vm: *Vm) !Compiler {
         .def_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "def"),
         .defun_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "defun"),
         .lambda_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "lambda"),
+        .do_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "do"),
         .if_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "if"),
+        .when_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "when"),
     };
 }
 
@@ -68,31 +73,29 @@ fn ownedInstructions(self: *Compiler) ![]Instruction {
 }
 
 fn macroExpand(self: *Compiler, ast: Val) !?Val {
-    var ret = ast;
-    var didReplace = false;
-    if (try self.macroExpandSubexpressions(ret)) |v| {
-        ret = v;
-        didReplace = true;
+    const expr = ast.toZig([]const Val, self.vm) catch return null;
+    if (try self.macroExpandDef(expr)) |v| {
+        return if (try self.macroExpand(v)) |x| x else v;
     }
-    if (try self.macroExpandDef(ret)) |v| {
-        ret = v;
-        didReplace = true;
+    if (try self.macroExpandDefun(expr)) |v| {
+        return if (try self.macroExpand(v)) |x| x else v;
     }
-    if (try self.macroExpandDefun(ret)) |v| {
-        ret = v;
-        didReplace = true;
+    if (try self.macroExpandWhen(expr)) |v| {
+        return if (try self.macroExpand(v)) |x| x else v;
     }
-    if (didReplace) return ret else return null;
+    if (try self.macroExpandSubexpressions(expr)) |v| {
+        return if (try self.macroExpand(v)) |x| x else v;
+    }
+    return null;
 }
 
-fn macroExpandSubexpressions(self: *Compiler, ast: Val) Error!?Val {
-    const exprs = ast.toZig([]const Val, self.vm) catch return null;
+fn macroExpandSubexpressions(self: *Compiler, expr: []const Val) Error!?Val {
     var expandedExpr: ?[]Val = null;
     defer if (expandedExpr) |v| self.allocator().free(v);
-    for (exprs, 0..exprs.len) |sub_expr, idx| {
+    for (expr, 0..expr.len) |sub_expr, idx| {
         if (try self.macroExpand(sub_expr)) |v| {
             if (expandedExpr) |_| {} else {
-                expandedExpr = try self.allocator().dupe(Val, exprs);
+                expandedExpr = try self.allocator().dupe(Val, expr);
             }
             expandedExpr.?[idx] = v;
         }
@@ -105,8 +108,7 @@ fn macroExpandSubexpressions(self: *Compiler, ast: Val) Error!?Val {
     return null;
 }
 
-fn macroExpandDefun(self: *Compiler, ast: Val) !?Val {
-    const expr = ast.toZig([]const Val, self.vm) catch return null;
+fn macroExpandDefun(self: *Compiler, expr: []const Val) !?Val {
     if (expr.len == 0) {
         return null;
     }
@@ -143,8 +145,29 @@ fn macroExpandDefun(self: *Compiler, ast: Val) !?Val {
     return null;
 }
 
-fn macroExpandDef(self: *Compiler, ast: Val) !?Val {
-    const expr = ast.toZig([]const Val, self.vm) catch return null;
+fn macroExpandWhen(self: *Compiler, expr: []const Val) !?Val {
+    if (expr.len == 0) {
+        return null;
+    }
+    const leading_symbol = if (expr[0].asInternedSymbol()) |x| x else return null;
+    if (leading_symbol.eql(self.when_symbol)) {
+        if (expr.len < 3) {
+            return Error.BadWhen;
+        }
+        var body_expr = try self.allocator().dupe(Val, expr[1..]);
+        defer self.allocator().free(body_expr);
+        body_expr[0] = self.do_symbol.toVal();
+        const expanded = try Val.fromZig([]const Val, self.vm, &.{
+            self.if_symbol.toVal(),
+            expr[1],
+            try Val.fromZig([]const Val, self.vm, body_expr),
+        });
+        return expanded;
+    }
+    return null;
+}
+
+fn macroExpandDef(self: *Compiler, expr: []const Val) !?Val {
     if (expr.len == 0) {
         return null;
     }
@@ -163,9 +186,9 @@ fn macroExpandDef(self: *Compiler, ast: Val) !?Val {
     return null;
 }
 
-fn compileOne(self: *Compiler, ast: Val) Error!void {
-    const expanded_ast = if (try self.macroExpand(ast)) |v| v else ast;
-    switch (expanded_ast.repr) {
+fn compileOne(self: *Compiler, unexpanded_ast: Val) Error!void {
+    const ast = if (try self.macroExpand(unexpanded_ast)) |v| v else unexpanded_ast;
+    switch (ast.repr) {
         .list => |list_id| {
             const list = self.vm.objects.get(Val.List, list_id);
             try self.compileTree(list.?.list);

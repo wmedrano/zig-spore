@@ -59,6 +59,13 @@ test "can evaluate if" {
     try vm.evalStr(void, "(if false (do 1 2 3 4))");
 }
 
+test "can evaluate when" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectEqual(4, try vm.evalStr(i64, "(when true 1 2 3 4)"));
+    try vm.evalStr(void, "(when false 1 2 3 4)");
+}
+
 test "can run lambda" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
