@@ -158,7 +158,7 @@ pub fn runGc(self: *Vm) !void {
 /// function's arguments. Performing operations like evaluating more
 /// code may mutate the local stack.
 pub fn localStack(self: *Vm) []Val {
-    const stack_start = if (self.stack_frames.getLastOrNull()) |sf| sf.stack_start else return &[0]Val{};
+    const stack_start = if (self.stack_frames.getLastOrNull()) |sf| sf.stack_start else return &.{};
     return self.stack[stack_start..self.stack_len];
 }
 
@@ -170,6 +170,17 @@ pub fn pushStackVal(self: *Vm, val: Val) !void {
     } else {
         return Val.FunctionError.StackOverflow;
     }
+}
+
+/// Pop the top value of the stack.
+///
+/// If the stack is empty, then the `void` value is returned.
+pub fn popStackVal(self: *Vm) Val {
+    if (self.stack_len == 0) {
+        return Val.init();
+    }
+    self.stack_len -= 1;
+    return self.stack[self.stack_len];
 }
 
 fn resetStacks(self: *Vm) void {

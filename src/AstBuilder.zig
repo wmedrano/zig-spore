@@ -80,7 +80,7 @@ fn atomToVal(vm: *Vm, atom: []const u8) Error!Val {
         return Val.fromZig(bool, vm, true);
     }
     if (std.mem.eql(u8, atom, "false")) {
-        return Val.fromZig(bool, vm, true);
+        return Val.fromZig(bool, vm, false);
     }
     if (atom[0] == '\"') {
         return stringAtomToVal(vm, atom);

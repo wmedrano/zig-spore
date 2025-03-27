@@ -4,6 +4,7 @@ const Vm = @import("Vm.zig");
 
 pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, DefineFn);
+    try vm.global.registerFunction(vm, DoFn);
     try vm.global.registerFunction(vm, PlusFn);
     try vm.global.registerFunction(vm, StrLenFn);
     try vm.global.registerFunction(vm, StrToSexpsFn);
@@ -45,6 +46,16 @@ const PlusFn = struct {
             return Val.fromZig(f64, vm, float_sum + int_sum_as_float);
         }
         return Val.fromZig(i64, vm, int_sum);
+    }
+};
+
+const DoFn = struct {
+    pub const name = "do";
+
+    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+        const args = vm.localStack();
+        if (args.len == 0) return Val.init();
+        return args[args.len - 1];
     }
 };
 

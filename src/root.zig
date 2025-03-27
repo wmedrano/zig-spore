@@ -50,6 +50,15 @@ test "can define" {
     );
 }
 
+test "can evaluate if" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectEqual(4, try vm.evalStr(i64, "(if true (do 1 2 3 4) (do 5 6))"));
+    try std.testing.expectEqual(4, try vm.evalStr(i64, "(if true (do 1 2 3 4))"));
+    try std.testing.expectEqual(6, try vm.evalStr(i64, "(if false (do 1 2 3 4) (do 5 6))"));
+    try vm.evalStr(void, "(if false (do 1 2 3 4))");
+}
+
 test "can run lambda" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();

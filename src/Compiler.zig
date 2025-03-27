@@ -10,6 +10,7 @@ const Compiler = @This();
 
 const Error = error{
     BadDefine,
+    BadIf,
     BadLambda,
     ExpectedIdentifier,
     NotImplemented,
@@ -27,6 +28,7 @@ internal_define_symbol: Val.InternedSymbol,
 def_symbol: Val.InternedSymbol,
 defun_symbol: Val.InternedSymbol,
 lambda_symbol: Val.InternedSymbol,
+if_symbol: Val.InternedSymbol,
 
 /// Initialize a new compiler for a `Vm`.
 pub fn init(vm: *Vm) !Compiler {
@@ -38,6 +40,7 @@ pub fn init(vm: *Vm) !Compiler {
         .def_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "def"),
         .defun_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "defun"),
         .lambda_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "lambda"),
+        .if_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "if"),
     };
 }
 
@@ -50,7 +53,7 @@ pub fn currentExpr(self: *Compiler) []Instruction {
 }
 
 pub fn compile(self: *Compiler, expr: Val) !void {
-    try self.compileMultiExprs(&[1]Val{expr});
+    try self.compileMultiExprs(&.{expr});
 }
 
 fn compileMultiExprs(self: *Compiler, exprs: []const Val) !void {
@@ -130,7 +133,7 @@ fn macroExpandDefun(self: *Compiler, ast: Val) !?Val {
         return try Val.fromZig(
             []const Val,
             self.vm,
-            &[_]Val{
+            &.{
                 self.internal_define_symbol.toVal(),
                 name.quoted().toVal(),
                 lambda_expr_val,
@@ -151,7 +154,7 @@ fn macroExpandDef(self: *Compiler, ast: Val) !?Val {
             return Error.BadDefine;
         }
         const symbol = if (expr[1].asInternedSymbol()) |x| x.quoted() else return Error.ExpectedIdentifier;
-        return try Val.fromZig([]const Val, self.vm, &[3]Val{
+        return try Val.fromZig([]const Val, self.vm, &.{
             self.internal_define_symbol.toVal(),
             symbol.toVal(),
             expr[2],
@@ -212,7 +215,7 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
                 const old_context = self.define_context;
                 defer self.define_context = old_context;
                 self.define_context = blk: {
-                    if (s.toSymbol(self.vm.*)) |name| {
+                    if (s.toSymbol(self.vm)) |name| {
                         if (name.quotes > 1) {
                             return Error.TooManyQuotes;
                         }
@@ -221,6 +224,12 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
                         break :blk "";
                     }
                 };
+            }
+        } else if (leading_symbol.eql(self.if_symbol)) {
+            switch (nodes.len) {
+                3 => return self.compileIf(nodes[1], nodes[2], Val.init()),
+                4 => return self.compileIf(nodes[1], nodes[2], nodes[3]),
+                else => return Error.BadIf,
             }
         }
     }
@@ -231,6 +240,32 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
         self.allocator(),
         Instruction{ .eval = @intCast(nodes.len) },
     );
+}
+
+fn compileIf(self: *Compiler, pred: Val, true_branch: Val, false_branch: Val) Error!void {
+    try self.compileOne(pred);
+    const jump_if_idx = self.instructions.items.len;
+    try self.instructions.append(
+        self.allocator(),
+        .{ .jump_if = 0 },
+    );
+    const false_branch_start = self.instructions.items.len;
+    try self.compileOne(false_branch);
+    const false_branch_end = self.instructions.items.len;
+    const jump_idx = self.instructions.items.len;
+    try self.instructions.append(
+        self.allocator(),
+        Instruction{ .jump = 0 },
+    );
+    const true_branch_start = self.instructions.items.len;
+    try self.compileOne(true_branch);
+    const true_branch_end = self.instructions.items.len;
+    self.instructions.items[jump_if_idx] = .{
+        .jump_if = @intCast(false_branch_end - false_branch_start + 1),
+    };
+    self.instructions.items[jump_idx] = .{
+        .jump = @intCast(true_branch_end - true_branch_start),
+    };
 }
 
 fn compileLambda(self: *Compiler, args: []const Val, exprs: []const Val) !void {

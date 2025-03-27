@@ -106,9 +106,7 @@ pub const ToZigError = error{
 /// lifetime is tied to the underlying object in the Vm's ObjectManager.
 /// The caller must ensure the Vm and its objects outlive the use of the slice.
 pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
-    // Disallow Val -> Val conversion via this function
     if (T == Val) return self;
-
     switch (self.repr) {
         .void => {
             if (T == void) return;
@@ -120,23 +118,16 @@ pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
         },
         .int => |v| {
             if (T == i64) return v;
-            // TODO: Add explicit conversions for other int types if needed, e.g.:
-            // if (T == i32) return @intCast(i32, v) catch return ToZigError.WrongType;
             return ToZigError.WrongType;
         },
         .float => |v| {
             if (T == f64) return v;
-            // TODO: Add explicit conversions for f32 if needed.
             return ToZigError.WrongType;
         },
         .string => {
             if (T == []const u8) {
                 if (self.asString(vm)) |s| {
                     return s;
-                } else {
-                    // asString returns null if not a string OR if object not found.
-                    // We know it's a string tag, so null means ObjectNotFound.
-                    return ToZigError.ObjectNotFound;
                 }
             }
             return ToZigError.WrongType;
@@ -144,33 +135,37 @@ pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
         .symbol => |interned_symbol| {
             if (T == InternedSymbol) return interned_symbol;
             if (T == Symbol) {
-                // Convert InternedSymbol back to Symbol via the interner.
                 const maybe_symbol = vm.objects.symbols.internedSymbolToSymbol(interned_symbol);
                 if (maybe_symbol) |symbol| {
                     return symbol;
-                } else {
-                    // If internedSymbolToSymbol returns null, the ID was invalid.
-                    // This indicates an internal inconsistency or a stale ID.
-                    return ToZigError.ObjectNotFound; // Treat as object not found.
                 }
+                return ToZigError.ObjectNotFound; // Treat as object not found.
             }
             return ToZigError.WrongType;
         },
         .list => {
             if (T == []const Val) {
-                if (self.asList(vm.*)) |l| {
+                if (self.asList(vm)) |l| {
                     return l;
                 }
-                // asList returns null if not a list OR if object not found.
-                // We know it's a list tag, so null means ObjectNotFound.
                 return ToZigError.ObjectNotFound;
             }
-            // TODO: Handle conversion to owned list ([]Val) if needed (requires allocator).
             return ToZigError.WrongType;
         },
         // Types not generally convertible back to simple Zig types.
         .function, .bytecode_function => return ToZigError.WrongType,
     }
+}
+
+/// Returns `true` if `self` is truthy.
+///
+/// All values are truthy except for `void` and `false`.
+pub fn isTruthy(self: Val) bool {
+    return switch (self.repr) {
+        .void => false,
+        .bool => |b| b,
+        else => true,
+    };
 }
 
 pub fn fromOwnedList(vm: *Vm, owned_list: []Val) !Val {
@@ -209,12 +204,12 @@ fn asString(self: Val, vm: *const Vm) ?[]const u8 {
 }
 
 /// Get the underlying value as a `Symbol`.
-pub fn asSymbol(self: Val, vm: Vm) !?Symbol {
+pub fn asSymbol(self: Val, vm: *const Vm) !?Symbol {
     const symbol = if (self.asInternedSymbol()) |s| s else return null;
     return vm.objects.symbols.internedSymbolToSymbol(symbol);
 }
 
-fn asList(self: Val, vm: Vm) ?[]const Val {
+fn asList(self: Val, vm: *const Vm) ?[]const Val {
     switch (self.repr) {
         .list => |id| {
             const list = if (vm.objects.get(List, id)) |list| list else return null;
@@ -251,11 +246,11 @@ const FormattedVal = struct {
                 try writer.print("\"{s}\"", .{string});
             },
             .symbol => {
-                const symbol = self.val.asSymbol(self.vm.*);
+                const symbol = self.val.asSymbol(self.vm);
                 try writer.print("{any}", .{symbol});
             },
             .list => {
-                const list = self.val.asList(self.vm.*).?;
+                const list = self.val.asList(self.vm).?;
                 try writer.print("(", .{});
                 for (list, 0..list.len) |v, idx| {
                     if (idx == 0) {
@@ -300,7 +295,7 @@ pub const InternedSymbol = packed struct {
         return .{ .repr = .{ .symbol = self } };
     }
 
-    pub fn toSymbol(self: InternedSymbol, vm: Vm) ?Symbol {
+    pub fn toSymbol(self: InternedSymbol, vm: *const Vm) ?Symbol {
         return vm.objects.symbols.internedSymbolToSymbol(self);
     }
 
@@ -340,7 +335,7 @@ pub const List = struct {
     pub fn garbageCollect(self: *List, allocator: std.mem.Allocator) void {
         if (self.list.len > 0) {
             allocator.free(self.list);
-            self.list = &[0]Val{};
+            self.list = &.{};
         }
     }
 
@@ -375,6 +370,8 @@ pub const ByteCodeFunction = struct {
                 .push => |v| obj.markReachable(v),
                 .eval => {},
                 .deref => {},
+                .jump_if => {},
+                .jump => {},
                 .ret => {},
             }
         }
