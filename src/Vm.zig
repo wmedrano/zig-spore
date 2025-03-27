@@ -46,6 +46,9 @@ pub const Options = struct {
     /// functions that need a lot of local state.
     comptime stack_size: usize = 4096,
 
+    /// If logging is enabled.
+    log: bool = false,
+
     /// The allocator to use. All objects on the `Vm` will use this
     /// allocator.
     allocator: std.mem.Allocator,
@@ -202,9 +205,12 @@ pub fn pushStackFrame(self: *Vm, stack_frame: StackFrame) !void {
 ///
 /// The value at the top of the stack is usually the return value. If
 /// the stack is empty, then a void value is returned.
-pub fn popStackFrame(self: *Vm) !Val {
-    const stack_frame = if (self.stack_frames.popOrNull()) |x| x else return error.StackFrameUnderflow;
-    const return_value = if (stack_frame.stack_start <= self.stack_len) self.stack[self.stack_len - 1] else Val.init();
+pub fn popStackFrame(self: *Vm) function.Error!Val {
+    const stack_frame = if (self.stack_frames.popOrNull()) |x| x else return function.Error.StackFrameUnderflow;
+    const return_value = if (stack_frame.stack_start <= self.stack_len and self.stack_len > 0)
+        self.stack[self.stack_len - 1]
+    else
+        Val.init();
     self.stack_len = stack_frame.stack_start;
     return return_value;
 }

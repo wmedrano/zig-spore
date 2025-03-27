@@ -167,6 +167,8 @@ fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) function.Error!void {
 }
 
 fn compileTree(self: *Compiler, nodes: []const Val) function.Error!void {
+    const old_context = self.define_context;
+    defer self.define_context = old_context;
     if (nodes.len == 0) {
         return function.Error.UnexpectedEmptyExpression;
     }
@@ -182,8 +184,6 @@ fn compileTree(self: *Compiler, nodes: []const Val) function.Error!void {
                 return function.Error.BadDefine;
             }
             if (nodes[1].asInternedSymbol()) |s| {
-                const old_context = self.define_context;
-                defer self.define_context = old_context;
                 self.define_context = blk: {
                     if (s.toSymbol(self.vm)) |name| {
                         if (name.quotes > 1) {
@@ -191,7 +191,7 @@ fn compileTree(self: *Compiler, nodes: []const Val) function.Error!void {
                         }
                         break :blk name.name;
                     } else {
-                        break :blk "";
+                        return function.Error.ObjectNotFound;
                     }
                 };
             }

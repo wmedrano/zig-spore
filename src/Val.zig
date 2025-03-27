@@ -209,6 +209,15 @@ pub fn asInternedKey(self: Val) ?Symbol.InternedKey {
     }
 }
 
+/// Returns true if `Val` is a number.
+pub fn isNumber(self: Val) bool {
+    switch (self.repr) {
+        .int => return true,
+        .float => return true,
+        else => return false,
+    }
+}
+
 /// Returns true if `Val` is an int.
 pub fn isInt(self: Val) bool {
     switch (self.repr) {
@@ -298,11 +307,11 @@ const FormattedVal = struct {
                 try writer.print(")", .{});
             },
             .function => |f| {
-                try writer.print("(native-function {any})", .{f.name});
+                try writer.print("(native-function {s})", .{f.name});
             },
             .bytecode_function => |id| {
                 const f = self.vm.objects.get(function.ByteCodeFunction, id).?;
-                try writer.print("(function {any})", .{f.name});
+                try writer.print("(function {s})", .{f.name});
             },
         }
     }

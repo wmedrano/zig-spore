@@ -19,10 +19,12 @@ pub const Error = error{
     ExpectedIdentifier,
     NotImplemented,
     ObjectNotFound,
+    StackFrameUnderflow,
     StackOverflow,
     TooManyQuotes,
     UnexpectedCloseParen,
     UnexpectedEmptyExpression,
+    ValueAlreadyDefined,
     WrongArity,
     WrongType,
 } || std.mem.Allocator.Error;
@@ -122,6 +124,7 @@ pub const FunctionVal = struct {
         );
         const result = try self.function(vm);
         vm.stack_len = stack_start;
+        _ = try vm.popStackFrame();
         return result;
     }
 };

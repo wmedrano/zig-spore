@@ -56,6 +56,7 @@ pub fn registerValueByName(self: *Module, vm: *Vm, name: []const u8, value: Val)
 }
 
 pub fn registerValue(self: *Module, vm: *Vm, symbol: Symbol.Interned, value: Val) !void {
+    if (self.values.contains(symbol)) return function.Error.ValueAlreadyDefined;
     try self.values.put(vm.allocator(), symbol, value);
 }
 

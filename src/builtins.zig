@@ -7,6 +7,7 @@ pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, DefineFn);
     try vm.global.registerFunction(vm, DoFn);
     try vm.global.registerFunction(vm, PlusFn);
+    try vm.global.registerFunction(vm, LessFn);
     try vm.global.registerFunction(vm, StrLenFn);
     try vm.global.registerFunction(vm, StrToSexpsFn);
     try vm.global.registerFunction(vm, StrToSexpFn);
@@ -47,6 +48,42 @@ const PlusFn = struct {
             return Val.fromZig(f64, vm, float_sum + int_sum_as_float);
         }
         return Val.fromZig(i64, vm, int_sum);
+    }
+};
+
+const LessFn = struct {
+    pub const name = "<";
+
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
+        const args = vm.localStack();
+        const arg_count = args.len;
+        if (arg_count == 0) return Val.fromZig(bool, vm, true);
+        if (arg_count == 1) if (args[0].isNumber()) return Val.fromZig(bool, vm, true) else return function.Error.WrongType;
+        var res = true;
+        for (args[0 .. arg_count - 1], args[1..]) |val_a, val_b| {
+            switch (val_a.repr) {
+                .int => |a| switch (val_b.repr) {
+                    .int => |b| res = res and (a < b),
+                    .float => |b| {
+                        const a_float: f64 = @floatFromInt(a);
+                        res = res and (a_float < b);
+                    },
+                    else => return function.Error.WrongType,
+                },
+                .float => |a| {
+                    switch (val_b.repr) {
+                        .int => |b| {
+                            const b_float: f64 = @floatFromInt(b);
+                            res = res and (a < b_float);
+                        },
+                        .float => |b| res = res and (a < b),
+                        else => return function.Error.WrongType,
+                    }
+                },
+                else => return function.Error.WrongType,
+            }
+        }
+        return Val.fromZig(bool, vm, res);
     }
 };
 

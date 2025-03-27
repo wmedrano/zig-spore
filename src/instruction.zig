@@ -65,7 +65,8 @@ pub const Instruction = union(InstructionTag) {
         if (n == 0) return function.Error.WrongArity;
         const function_idx = vm.stack_len - n;
         const stack_start = function_idx + 1;
-        switch (vm.stack[function_idx].repr) {
+        const function_val = vm.stack[function_idx];
+        switch (function_val.repr) {
             .function => |f| {
                 const result = try f.execute(vm, stack_start);
                 vm.stack[function_idx] = result;
@@ -74,7 +75,11 @@ pub const Instruction = union(InstructionTag) {
                 const bytecode = vm.objects.get(function.ByteCodeFunction, bytecode_id).?;
                 try bytecode.startExecute(vm, stack_start);
             },
-            else => return error.ValueNotCallable,
+            else => {
+                if (vm.options.log)
+                    std.log.err("Value {any} not callable.", .{function_val.formatted(vm)});
+                return error.ValueNotCallable;
+            },
         }
     }
 
@@ -85,10 +90,12 @@ pub const Instruction = union(InstructionTag) {
 
     fn executeDeref(vm: *Vm, symbol: Symbol.Interned) !void {
         const val = if (vm.global.getValue(symbol)) |v| v else {
-            if (vm.objects.string_interner.getString(symbol.id)) |name| {
-                std.log.err("Symbol {s} not found.\n", .{name});
-            } else {
-                std.log.err("Symbol {any} not found.\n", .{symbol.id});
+            if (vm.options.log) {
+                if (vm.objects.string_interner.getString(symbol.id)) |name| {
+                    std.log.err("Symbol {s} not found.\n", .{name});
+                } else {
+                    std.log.err("Symbol {any} not found.\n", .{symbol.id});
+                }
             }
             return error.SymbolNotFound;
         };
