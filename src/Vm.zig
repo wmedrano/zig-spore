@@ -5,7 +5,6 @@ const AstBuilder = @import("AstBuilder.zig");
 const Compiler = @import("Compiler.zig");
 const Instruction = @import("instruction.zig").Instruction;
 const Module = @import("Module.zig");
-const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const builtins = @import("builtins.zig");
 

@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Instruction = @import("instruction.zig").Instruction;
 const ObjectManager = @import("ObjectManager.zig");
+const StringInterner = @import("StringInterner.zig");
 const Vm = @import("Vm.zig");
 const Symbol = @import("Symbol.zig");
 
@@ -37,8 +38,8 @@ const ValRepr = union(ValTag) {
     int: i64,
     float: f64,
     string: ObjectManager.Id(String),
-    symbol: InternedSymbol,
-    key: InternedKey,
+    symbol: Symbol.Interned,
+    key: Symbol.InternedKey,
     list: ObjectManager.Id(List),
     function: *const FunctionVal,
     bytecode_function: ObjectManager.Id(ByteCodeFunction),
@@ -60,7 +61,7 @@ pub fn init() Val {
 /// - `[]const u8` - Creates a new `Val.string` by copying the slice
 ///     contents.
 /// - `Symbol` - Converts to a `Val.symbol`.
-/// - `InternedSymbol` - Converts to a `Val.symbol`.
+/// - `Symbol.Interned` - Converts to a `Val.symbol`.
 /// - `[]const Val` - Converts to a `Val.list`.
 pub fn fromZig(comptime T: type, vm: *Vm, val: T) !Val {
     if (T == Val) return val;
@@ -75,15 +76,15 @@ pub fn fromZig(comptime T: type, vm: *Vm, val: T) !Val {
             return .{ .repr = .{ .string = id } };
         },
         Symbol => {
-            const interned_symbol = try InternedSymbol.fromSymbol(vm, val);
+            const interned_symbol = try val.intern(vm);
             return interned_symbol.toVal();
         },
-        InternedSymbol => return val.toVal(),
+        Symbol.Interned => return val.toVal(),
         Symbol.Key => {
-            const interned_key = try InternedKey.fromKey(vm, val);
+            const interned_key = try Symbol.InternedKey.fromKey(vm, val);
             return interned_key.toVal();
         },
-        InternedKey => return val.toVal(),
+        Symbol.InternedKey => return val.toVal(),
         []const Val => {
             const owned_list = try vm.allocator().dupe(Val, val);
             return fromOwnedList(vm, owned_list);
@@ -105,7 +106,7 @@ pub const ToZigError = error{
 /// - `i64`
 /// - `f64`
 /// - `[]const u8` (returns a slice pointing to the Val's internal string)
-/// - `Symbol` or `InternedSymbol`
+/// - `Symbol` or `Symbol.Interned`
 /// - `Symbol.Key` or `InternedKey`
 /// - `[]const Val` (returns a slice pointing to the Val's internal list)
 ///
@@ -141,11 +142,11 @@ pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
         },
         .symbol => |interned_symbol| {
             switch (T) {
-                InternedSymbol => return interned_symbol,
+                Symbol.Interned => return interned_symbol,
                 Symbol => {
-                    const maybe_symbol = vm.objects.symbols.internedSymbolToSymbol(interned_symbol);
-                    if (maybe_symbol) |symbol| {
-                        return symbol;
+                    const maybe_str = vm.objects.string_interner.getString(interned_symbol.id);
+                    if (maybe_str) |str| {
+                        return .{ .quotes = interned_symbol.quotes, .name = str };
                     }
                     return ToZigError.ObjectNotFound;
                 },
@@ -154,7 +155,7 @@ pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
         },
         .key => |interned_key| {
             switch (T) {
-                InternedKey => return interned_key,
+                Symbol.InternedKey => return interned_key,
                 Symbol.Key => {
                     const maybe_key = vm.objects.symbols.internedSymbolToSymbol(interned_key.repr);
                     if (maybe_key) |k| {
@@ -202,14 +203,14 @@ pub fn fromSymbolStr(vm: *Vm, symbol_str: []const u8) !Val {
     return Val.fromZig(Symbol, vm, symbol);
 }
 
-pub fn asInternedSymbol(self: Val) ?InternedSymbol {
+pub fn asInternedSymbol(self: Val) ?Symbol.Interned {
     switch (self.repr) {
         .symbol => |symbol| return symbol,
         else => return null,
     }
 }
 
-pub fn asInternedKey(self: Val) ?InternedKey {
+pub fn asInternedKey(self: Val) ?Symbol.InternedKey {
     switch (self.repr) {
         .key => |k| return k,
         else => return null,
@@ -235,14 +236,13 @@ fn asString(self: Val, vm: *const Vm) ?[]const u8 {
 }
 
 fn asSymbol(self: Val, vm: *const Vm) !?Symbol {
-    const symbol = if (self.asInternedSymbol()) |s| s else return null;
-    return vm.objects.symbols.internedSymbolToSymbol(symbol);
+    const interned_symbol = if (self.asInternedSymbol()) |s| s else return null;
+    return interned_symbol.toSymbol(vm);
 }
 
 fn asKey(self: Val, vm: *const Vm) !?Symbol.Key {
     const interned_key = if (self.asInternedKey()) |k| k else return null;
-    const symbol = if (vm.objects.symbols.internedSymbolToSymbol(interned_key.repr)) |s| s else return null;
-    return .{ .name = symbol.name };
+    return interned_key.toKey(vm);
 }
 
 fn asList(self: Val, vm: *const Vm) ?[]const Val {
@@ -313,66 +313,6 @@ const FormattedVal = struct {
                 try writer.print("(function {any})", .{f.name});
             },
         }
-    }
-};
-
-pub const InternedKey = packed struct {
-    repr: InternedSymbol,
-
-    pub fn fromKey(vm: *Vm, key: Symbol.Key) !InternedKey {
-        const symbol = try vm.objects.symbols.strToSymbol(
-            vm.allocator(),
-            .{ .quotes = 0, .name = key.name },
-        );
-        return .{ .repr = symbol };
-    }
-
-    pub fn toVal(self: InternedKey) Val {
-        return .{ .repr = .{ .key = self } };
-    }
-};
-
-pub const InternedSymbol = packed struct {
-    quotes: u2,
-    id: u30,
-
-    pub fn fromSymbolStr(vm: *Vm, symbol_str: []const u8) !InternedSymbol {
-        return InternedSymbol.fromSymbol(vm, try Symbol.fromStr(symbol_str));
-    }
-
-    pub fn fromSymbol(vm: *Vm, symbol: Symbol) !InternedSymbol {
-        return try vm.objects.symbols.strToSymbol(
-            vm.allocator(),
-            symbol,
-        );
-    }
-
-    pub fn eql(self: InternedSymbol, other: InternedSymbol) bool {
-        return self.quotes == other.quotes and self.id == other.id;
-    }
-
-    pub fn toVal(self: InternedSymbol) Val {
-        return .{ .repr = .{ .symbol = self } };
-    }
-
-    pub fn toSymbol(self: InternedSymbol, vm: *const Vm) ?Symbol {
-        return vm.objects.symbols.internedSymbolToSymbol(self);
-    }
-
-    pub fn quoted(self: InternedSymbol) InternedSymbol {
-        if (self.quotes == std.math.maxInt(u2)) return self;
-        return InternedSymbol{
-            .quotes = self.quotes + 1,
-            .id = self.id,
-        };
-    }
-
-    pub fn unquoted(self: InternedSymbol) InternedSymbol {
-        if (self.quotes == 0) return self;
-        return InternedSymbol{
-            .quotes = self.quotes - 1,
-            .id = self.id,
-        };
     }
 };
 

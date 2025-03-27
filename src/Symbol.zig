@@ -1,46 +1,35 @@
 const std = @import("std");
-
+const StringInterner = @import("StringInterner.zig");
 const Val = @import("Val.zig");
+const Vm = @import("Vm.zig");
 
 const Symbol = @This();
-
-pub const FromStrError = error{ TooManyQuotes, EmptySymbol };
 
 quotes: u2,
 name: []const u8,
 
-pub const Key = struct {
-    name: []const u8,
-
-    pub fn format(
-        self: Key,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        _ = fmt;
-        _ = options;
-        try writer.print(":{s}", .{self.name});
-    }
-};
-
-/// Create a new symbol from a string.
-///
-/// Any leading `'` are parsed as quotes.
-pub fn fromStr(str: []const u8) FromStrError!Symbol {
+pub fn fromStr(str: []const u8) !Symbol {
     var quotes: usize = 0;
     while (quotes < str.len and str[quotes] == '\'') {
         quotes += 1;
     }
     if (quotes > std.math.maxInt(u2)) {
-        return FromStrError.TooManyQuotes;
+        return error.TooManyQuotes;
     }
     const name = str[quotes..];
-    if (name.len == 0) return FromStrError.EmptySymbol;
+    if (name.len == 0) return error.EmptySymbol;
     return Symbol{
         .quotes = @intCast(quotes),
         .name = name,
     };
+}
+
+pub fn intern(self: Symbol, vm: *Vm) !Interned {
+    const id = try vm.objects.string_interner.intern(
+        vm.allocator(),
+        self.name,
+    );
+    return .{ .quotes = self.quotes, .id = id };
 }
 
 pub fn format(
@@ -59,70 +48,81 @@ pub fn format(
     }
 }
 
-pub const SymbolTable = struct {
-    symbols: std.ArrayListUnmanaged([]const u8) = .{},
-    name_to_symbol: std.StringHashMapUnmanaged(u30) = .{},
+pub const InternedKey = packed struct {
+    _: u2,
+    id: StringInterner.Id,
 
-    pub fn deinit(self: *SymbolTable, allocator: std.mem.Allocator) void {
-        for (self.symbols.items) |k| {
-            allocator.free(k);
-        }
-        self.symbols.deinit(allocator);
-        self.name_to_symbol.deinit(allocator);
+    pub fn fromKey(vm: *Vm, key: Key) !InternedKey {
+        const id = try vm.objects.string_interner.intern(
+            vm.allocator(),
+            key.name,
+        );
+        return .{ ._ = 0, .id = id };
     }
 
-    pub fn strToSymbol(self: *SymbolTable, allocator: std.mem.Allocator, str: Symbol) !Val.InternedSymbol {
-        if (self.name_to_symbol.get(str.name)) |id| {
-            return Val.InternedSymbol{
-                .quotes = str.quotes,
-                .id = id,
-            };
-        }
-        const name = try allocator.dupe(u8, str.name);
-        const id = Val.InternedSymbol{ .quotes = str.quotes, .id = @intCast(self.size()) };
-        try self.symbols.append(allocator, name);
-        try self.name_to_symbol.put(allocator, name, id.id);
-        return id;
+    pub fn toKey(self: InternedKey, vm: *const Vm) ?Key {
+        const str = if (vm.objects.string_interner.getString(self.id)) |s| s else return null;
+        return .{ .name = str };
     }
 
-    pub fn internedSymbolToSymbol(self: SymbolTable, symbol: Val.InternedSymbol) ?Symbol {
-        if (symbol.id < self.size()) {
-            return Symbol{
-                .quotes = symbol.quotes,
-                .name = self.symbols.items[symbol.id],
-            };
-        }
-        return null;
-    }
-
-    fn size(self: SymbolTable) u32 {
-        return @intCast(self.symbols.items.len);
+    pub fn toVal(self: InternedKey) Val {
+        return .{ .repr = .{ .key = self } };
     }
 };
 
-fn countQuotes(s: []const u8) u2 {
-    const u2_max = 3;
-    const len = if (s.len > u2_max) u2_max else s.len;
-    for (0..len) |idx| {
-        if (s[idx] != '\'') {
-            return @intCast(idx);
-        }
+test "interned key size is small" {
+    try std.testing.expectEqual(4, @sizeOf(InternedKey));
+}
+
+pub const Key = struct {
+    name: []const u8,
+
+    pub fn format(
+        self: Key,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print(":{s}", .{self.name});
     }
-    return len;
-}
+};
 
-test "symbols from different but equivalent strings are bitwise equal" {
-    var symbol_table = SymbolTable{};
-    defer symbol_table.deinit(std.testing.allocator);
-    const symbol_1 = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.fromStr("symbol"));
-    const symbol_2 = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.fromStr("symbol"));
-    try std.testing.expectEqual(symbol_1, symbol_2);
-}
+pub const Interned = packed struct {
+    quotes: u2,
+    id: StringInterner.Id,
 
-test "symbol can be converted to str" {
-    var symbol_table = SymbolTable{};
-    defer symbol_table.deinit(std.testing.allocator);
-    const symbol = try symbol_table.strToSymbol(std.testing.allocator, try Symbol.fromStr("symbol"));
-    const actual = symbol_table.internedSymbolToSymbol(symbol).?;
-    try std.testing.expectEqualDeep(Symbol.fromStr("symbol"), actual);
+    pub fn eql(self: Interned, other: Interned) bool {
+        return self.quotes == other.quotes and self.id.eql(other.id);
+    }
+
+    pub fn toVal(self: Interned) Val {
+        return .{ .repr = .{ .symbol = self } };
+    }
+
+    pub fn toSymbol(self: Interned, vm: *const Vm) ?Symbol {
+        const maybe_str = if (vm.objects.string_interner.getString(self.id)) |s| s else return null;
+        return .{ .quotes = self.quotes, .name = maybe_str };
+    }
+
+    pub fn quoted(self: Interned) Interned {
+        if (self.quotes == std.math.maxInt(u2)) return self;
+        return Interned{
+            .quotes = self.quotes + 1,
+            .id = self.id,
+        };
+    }
+
+    pub fn unquoted(self: Interned) Interned {
+        if (self.quotes == 0) return self;
+        return Interned{
+            .quotes = self.quotes - 1,
+            .id = self.id,
+        };
+    }
+};
+
+test "interned symbol size is small" {
+    try std.testing.expectEqual(4, @sizeOf(Interned));
 }

@@ -1,18 +1,18 @@
 const std = @import("std");
 
-const SymbolTable = @import("Symbol.zig").SymbolTable;
+const StringInterner = @import("StringInterner.zig");
 const Val = @import("Val.zig");
 
 const ObjectManager = @This();
 
-symbols: SymbolTable = .{},
+string_interner: StringInterner = .{},
 strings: ObjectStorage(Val.String) = .{},
 lists: ObjectStorage(Val.List) = .{},
 bytecode_functions: ObjectStorage(Val.ByteCodeFunction) = .{},
 reachable_color: Color = Color.blue,
 
 pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
-    self.symbols.deinit(allocator);
+    self.string_interner.deinit(allocator);
     self.strings.deinit(allocator);
     self.lists.deinit(allocator);
     self.bytecode_functions.deinit(allocator);

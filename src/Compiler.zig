@@ -19,20 +19,20 @@ const Error = error{
     TooManyQuotes,
     UnexpectedEmptyExpression,
     WrongType,
-} || Symbol.FromStrError || Allocator.Error;
+} || Allocator.Error;
 
 vm: *Vm,
 instructions: std.ArrayListUnmanaged(Instruction),
 // The symbol that is in thep process of being defined.
 define_context: []const u8,
 locals: std.ArrayListUnmanaged([]const u8),
-internal_define_symbol: Val.InternedSymbol,
-def_symbol: Val.InternedSymbol,
-defun_symbol: Val.InternedSymbol,
-function_symbol: Val.InternedSymbol,
-do_symbol: Val.InternedSymbol,
-if_symbol: Val.InternedSymbol,
-when_symbol: Val.InternedSymbol,
+internal_define_symbol: Symbol.Interned,
+def_symbol: Symbol.Interned,
+defun_symbol: Symbol.Interned,
+function_symbol: Symbol.Interned,
+do_symbol: Symbol.Interned,
+if_symbol: Symbol.Interned,
+when_symbol: Symbol.Interned,
 
 /// Initialize a new compiler for a `Vm`.
 pub fn init(vm: *Vm) !Compiler {
@@ -41,13 +41,13 @@ pub fn init(vm: *Vm) !Compiler {
         .instructions = .{},
         .define_context = "",
         .locals = .{},
-        .internal_define_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "%define"),
-        .def_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "def"),
-        .defun_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "defun"),
-        .function_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "function"),
-        .do_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "do"),
-        .if_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "if"),
-        .when_symbol = try Val.InternedSymbol.fromSymbolStr(vm, "when"),
+        .internal_define_symbol = try (Symbol{ .quotes = 0, .name = "%define" }).intern(vm),
+        .def_symbol = try (Symbol{ .quotes = 0, .name = "def" }).intern(vm),
+        .defun_symbol = try (Symbol{ .quotes = 0, .name = "defun" }).intern(vm),
+        .function_symbol = try (Symbol{ .quotes = 0, .name = "function" }).intern(vm),
+        .do_symbol = try (Symbol{ .quotes = 0, .name = "do" }).intern(vm),
+        .if_symbol = try (Symbol{ .quotes = 0, .name = "if" }).intern(vm),
+        .when_symbol = try (Symbol{ .quotes = 0, .name = "when" }).intern(vm),
     };
 }
 
@@ -218,13 +218,13 @@ fn compileOne(self: *Compiler, unexpanded_ast: Val) Error!void {
     }
 }
 
-fn compileSymbol(self: *Compiler, symbol: Val.InternedSymbol) Error!void {
+fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) Error!void {
     if (symbol.quotes > 0) {
         try self.instructions.append(
             self.allocator(),
             Instruction{
                 .push = try Val.fromZig(
-                    Val.InternedSymbol,
+                    Symbol.Interned,
                     self.vm,
                     .{ .quotes = symbol.quotes - 1, .id = symbol.id },
                 ),

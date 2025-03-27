@@ -6,7 +6,7 @@ const Vm = @import("Vm.zig");
 
 const Module = @This();
 
-values: std.AutoHashMapUnmanaged(Val.InternedSymbol, Val) = .{},
+values: std.AutoHashMapUnmanaged(Symbol.Interned, Val) = .{},
 
 pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
     self.values.deinit(allocator);
@@ -55,17 +55,16 @@ pub fn registerFunction(self: *Module, vm: *Vm, comptime function: type) !void {
 }
 
 pub fn registerValueByName(self: *Module, vm: *Vm, name: []const u8, value: Val) !void {
-    const symbol = try vm.objects.symbols.strToSymbol(
-        vm.allocator(),
-        Symbol{ .quotes = 0, .name = name },
-    );
-    try self.registerValue(vm, symbol, value);
+    const symbol = try Symbol.fromStr(name);
+    if (symbol.quotes != 0) return error.TooManyQuotes;
+    const interned_symbol = try symbol.intern(vm);
+    try self.registerValue(vm, interned_symbol, value);
 }
 
-pub fn registerValue(self: *Module, vm: *Vm, symbol: Val.InternedSymbol, value: Val) !void {
+pub fn registerValue(self: *Module, vm: *Vm, symbol: Symbol.Interned, value: Val) !void {
     try self.values.put(vm.allocator(), symbol, value);
 }
 
-pub fn getValue(self: Module, symbol: Val.InternedSymbol) ?Val {
+pub fn getValue(self: Module, symbol: Symbol.Interned) ?Val {
     return self.values.get(symbol);
 }

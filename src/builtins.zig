@@ -113,8 +113,8 @@ test "str->sexp produces s-expression" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try std.testing.expectFmt(
-        "(+ 1 (foo 2 3))",
+        "(+ 1 (foo 2 3 :key ''quoted))",
         "{any}",
-        .{(try vm.evalStr(Val, "(str->sexp \"   (+ 1 (foo 2 3))    \")")).formatted(&vm)},
+        .{(try vm.evalStr(Val, "(str->sexp \"   (+ 1 (foo 2 3 :key ''quoted))    \")")).formatted(&vm)},
     );
 }

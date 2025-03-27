@@ -1,4 +1,5 @@
 const std = @import("std");
+const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
@@ -16,7 +17,7 @@ pub const Instruction = union(InstructionTag) {
     push: Val,
     eval: u32,
     get_local: u32,
-    deref: Val.InternedSymbol,
+    deref: Symbol.Interned,
     jump_if: u32,
     jump: u32,
     ret,
@@ -97,10 +98,10 @@ pub const Instruction = union(InstructionTag) {
         try executePush(vm, val);
     }
 
-    fn executeDeref(vm: *Vm, symbol: Val.InternedSymbol) !void {
+    fn executeDeref(vm: *Vm, symbol: Symbol.Interned) !void {
         const val = if (vm.global.getValue(symbol)) |v| v else {
-            if (vm.objects.symbols.internedSymbolToSymbol(symbol)) |name| {
-                std.log.err("Symbol {s} not found.\n", .{name.name});
+            if (vm.objects.string_interner.getString(symbol.id)) |name| {
+                std.log.err("Symbol {s} not found.\n", .{name});
             } else {
                 std.log.err("Symbol {any} not found.\n", .{symbol.id});
             }

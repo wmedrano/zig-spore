@@ -2,7 +2,6 @@
 //!
 //! The bulk of the work is done by the `Vm` struct.
 pub const Module = @import("Module.zig");
-pub const Symbol = @import("Symbol.zig");
 pub const Val = @import("Val.zig");
 pub const Vm = @import("Vm.zig");
 
