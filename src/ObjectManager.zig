@@ -2,13 +2,14 @@ const std = @import("std");
 
 const StringInterner = @import("StringInterner.zig");
 const Val = @import("Val.zig");
+const function = @import("function.zig");
 
 const ObjectManager = @This();
 
 string_interner: StringInterner = .{},
 strings: ObjectStorage(Val.String) = .{},
 lists: ObjectStorage(Val.List) = .{},
-bytecode_functions: ObjectStorage(Val.ByteCodeFunction) = .{},
+bytecode_functions: ObjectStorage(function.ByteCodeFunction) = .{},
 reachable_color: Color = Color.blue,
 
 pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
@@ -22,7 +23,7 @@ pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator,
     var object_storage = switch (T) {
         Val.String => &self.strings,
         Val.List => &self.lists,
-        Val.ByteCodeFunction => &self.bytecode_functions,
+        function.ByteCodeFunction => &self.bytecode_functions,
         else => @compileError("type not supported"),
     };
     return object_storage.put(allocator, val, self.unreachableColor());
@@ -32,7 +33,7 @@ pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
     const object_storage = switch (T) {
         Val.String => self.strings,
         Val.List => self.lists,
-        Val.ByteCodeFunction => self.bytecode_functions,
+        function.ByteCodeFunction => self.bytecode_functions,
         else => @compileError("type not supported"),
     };
     return object_storage.get(id);
@@ -167,7 +168,7 @@ pub fn Id(comptime T: type) type {
             switch (T) {
                 Val.String => return Val{ .repr = .{ .string = self } },
                 Val.List => return Val{ .repr = .{ .list = self } },
-                Val.ByteCodeFunction => return Val{ .repr = .{ .bytecode_function = self } },
+                function.ByteCodeFunction => return Val{ .repr = .{ .bytecode_function = self } },
                 else => @compileError("no valid conversion to Val"),
             }
         }

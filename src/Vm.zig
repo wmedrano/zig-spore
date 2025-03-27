@@ -7,6 +7,7 @@ const Instruction = @import("instruction.zig").Instruction;
 const Module = @import("Module.zig");
 const Val = @import("Val.zig");
 const builtins = @import("builtins.zig");
+const function = @import("function.zig");
 
 const ObjectManager = @import("ObjectManager.zig");
 
@@ -142,7 +143,7 @@ pub fn runGc(self: *Vm) !void {
         self.objects.markReachable(v);
     }
     for (self.stack_frames.items) |stack_frame| {
-        Val.ByteCodeFunction.markInstructions(stack_frame.instructions, &self.objects);
+        function.ByteCodeFunction.markInstructions(stack_frame.instructions, &self.objects);
     }
     var globalsIter = self.global.values.valueIterator();
     while (globalsIter.next()) |v| {
@@ -167,7 +168,7 @@ pub fn pushStackVal(self: *Vm, val: Val) !void {
         self.stack[self.stack_len] = val;
         self.stack_len += 1;
     } else {
-        return Val.FunctionError.StackOverflow;
+        return function.Error.StackOverflow;
     }
 }
 

@@ -1,7 +1,9 @@
 const std = @import("std");
+
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const function = @import("function.zig");
 
 pub const InstructionTag = enum {
     push,
@@ -60,34 +62,17 @@ pub const Instruction = union(InstructionTag) {
     }
 
     fn executeEval(vm: *Vm, n: u32) !void {
-        if (n == 0) return Val.FunctionError.WrongArity;
-        const arg_count = n - 1;
+        if (n == 0) return function.Error.WrongArity;
         const function_idx = vm.stack_len - n;
         const stack_start = function_idx + 1;
-        const function_val = vm.stack[function_idx];
-        switch (function_val.repr) {
+        switch (vm.stack[function_idx].repr) {
             .function => |f| {
-                try vm.pushStackFrame(
-                    Vm.StackFrame{
-                        .instructions = &.{},
-                        .stack_start = stack_start,
-                        .next_instruction = 0,
-                    },
-                );
-                const v = try f.*.function(vm);
-                vm.stack[function_idx] = v;
-                vm.stack_len = function_idx + 1;
+                const result = try f.execute(vm, stack_start);
+                vm.stack[function_idx] = result;
             },
             .bytecode_function => |bytecode_id| {
-                const bytecode = vm.objects.get(Val.ByteCodeFunction, bytecode_id).?;
-                if (bytecode.args != arg_count) return Val.FunctionError.WrongArity;
-                try vm.pushStackFrame(
-                    Vm.StackFrame{
-                        .instructions = bytecode.instructions,
-                        .stack_start = stack_start,
-                        .next_instruction = 0,
-                    },
-                );
+                const bytecode = vm.objects.get(function.ByteCodeFunction, bytecode_id).?;
+                try bytecode.startExecute(vm, stack_start);
             },
             else => return error.ValueNotCallable,
         }

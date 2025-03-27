@@ -3,6 +3,7 @@ const std = @import("std");
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const function = @import("function.zig");
 
 const Module = @This();
 
@@ -12,10 +13,9 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
     self.values.deinit(allocator);
 }
 
-/// Register global function `function`.
+/// Register a global function.
 ///
-/// - It is registered under the name `function.name`.
-/// - The value pointed to by `function` must outlive the interpretter.
+/// See `function.FunctionVal.init` for the specification for `func`.
 ///
 /// ```zig
 /// const Add2Fn = struct {
@@ -38,18 +38,12 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
 ///     );
 /// }
 /// ```
-pub fn registerFunction(self: *Module, vm: *Vm, comptime function: type) !void {
-    const wrapped_function = struct {
-        const FUNCTION = Val.FunctionVal{
-            .name = function.name,
-            .function = function.fnImpl,
-        };
-    };
+pub fn registerFunction(self: *Module, vm: *Vm, comptime func: type) !void {
     try self.registerValueByName(
         vm,
-        function.name,
+        func.name,
         .{
-            .repr = .{ .function = &wrapped_function.FUNCTION },
+            .repr = .{ .function = function.FunctionVal.init(func) },
         },
     );
 }

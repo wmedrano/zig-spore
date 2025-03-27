@@ -3,21 +3,13 @@ const std = @import("std");
 const Instruction = @import("instruction.zig").Instruction;
 const ObjectManager = @import("ObjectManager.zig");
 const StringInterner = @import("StringInterner.zig");
-const Vm = @import("Vm.zig");
 const Symbol = @import("Symbol.zig");
+const Vm = @import("Vm.zig");
+const function = @import("function.zig");
 
 const Val = @This();
 
 repr: ValRepr,
-
-pub const FunctionError = error{
-    BadArg,
-    NotImplemented,
-    ObjectNotFound,
-    StackOverflow,
-    WrongArity,
-    WrongType,
-} || @import("AstBuilder.zig").Error || std.mem.Allocator.Error;
 
 pub const ValTag = enum {
     void,
@@ -41,8 +33,8 @@ const ValRepr = union(ValTag) {
     symbol: Symbol.Interned,
     key: Symbol.InternedKey,
     list: ObjectManager.Id(List),
-    function: *const FunctionVal,
-    bytecode_function: ObjectManager.Id(ByteCodeFunction),
+    function: *const function.FunctionVal,
+    bytecode_function: ObjectManager.Id(function.ByteCodeFunction),
 };
 
 /// Initialize a new `Val` to the default `void` value.
@@ -309,7 +301,7 @@ const FormattedVal = struct {
                 try writer.print("(native-function {any})", .{f.name});
             },
             .bytecode_function => |id| {
-                const f = self.vm.objects.get(ByteCodeFunction, id).?;
+                const f = self.vm.objects.get(function.ByteCodeFunction, id).?;
                 try writer.print("(function {any})", .{f.name});
             },
         }
@@ -342,40 +334,6 @@ pub const List = struct {
     pub fn markChildren(self: List, obj: *ObjectManager) void {
         for (self.list) |v| {
             obj.markReachable(v);
-        }
-    }
-};
-
-pub const FunctionVal = struct {
-    name: []const u8,
-    function: *const fn (*Vm) FunctionError!Val,
-};
-
-pub const ByteCodeFunction = struct {
-    name: []const u8,
-    instructions: []const Instruction,
-    args: u32,
-
-    pub fn garbageCollect(self: *ByteCodeFunction, allocator: std.mem.Allocator) void {
-        allocator.free(self.name);
-        allocator.free(self.instructions);
-    }
-
-    pub fn markChildren(self: ByteCodeFunction, obj: *ObjectManager) void {
-        markInstructions(self.instructions, obj);
-    }
-
-    pub fn markInstructions(instructions: []const Instruction, obj: *ObjectManager) void {
-        for (instructions) |instruction| {
-            switch (instruction) {
-                .push => |v| obj.markReachable(v),
-                .eval => {},
-                .get_local => {},
-                .deref => {},
-                .jump_if => {},
-                .jump => {},
-                .ret => {},
-            }
         }
     }
 };

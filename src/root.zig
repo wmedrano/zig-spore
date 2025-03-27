@@ -4,6 +4,7 @@
 pub const Module = @import("Module.zig");
 pub const Val = @import("Val.zig");
 pub const Vm = @import("Vm.zig");
+const function = @import("function.zig");
 
 const std = @import("std");
 
@@ -94,9 +95,9 @@ test "function call with wrong args returns error" {
 
 const Add2Fn = struct {
     pub const name = "add-2";
-    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
         const args = vm.localStack();
-        if (args.len != 1) return Val.FunctionError.WrongArity;
+        if (args.len != 1) return function.Error.WrongArity;
         const arg = try args[0].toZig(i64, vm);
         return Val.fromZig(i64, vm, 2 + arg);
     }

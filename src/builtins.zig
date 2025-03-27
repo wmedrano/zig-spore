@@ -1,6 +1,7 @@
 const std = @import("std");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const function = @import("function.zig");
 
 pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, DefineFn);
@@ -14,12 +15,12 @@ pub fn registerAll(vm: *Vm) !void {
 const DefineFn = struct {
     pub const name = "%define";
 
-    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
         const args = vm.localStack();
         if (args.len != 2) {
-            return Val.FunctionError.WrongArity;
+            return function.Error.WrongArity;
         }
-        const symbol = if (args[0].asInternedSymbol()) |s| s else return Val.FunctionError.WrongType;
+        const symbol = if (args[0].asInternedSymbol()) |s| s else return function.Error.WrongType;
         const value = args[1];
         try vm.global.registerValue(vm, symbol, value);
         return Val.init();
@@ -29,7 +30,7 @@ const DefineFn = struct {
 const PlusFn = struct {
     pub const name = "+";
 
-    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
         var int_sum: i64 = 0;
         var float_sum: f64 = 0.0;
         var has_float = false;
@@ -52,7 +53,7 @@ const PlusFn = struct {
 const DoFn = struct {
     pub const name = "do";
 
-    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
         const args = vm.localStack();
         if (args.len == 0) return Val.init();
         return args[args.len - 1];
@@ -61,10 +62,10 @@ const DoFn = struct {
 
 const StrLenFn = struct {
     pub const name = "str-len";
-    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
         const args = vm.localStack();
         if (args.len != 1) {
-            return Val.FunctionError.WrongArity;
+            return function.Error.WrongArity;
         }
         const str = try args[0].toZig([]const u8, vm);
         return Val.fromZig(i64, vm, @intCast(str.len));
@@ -73,10 +74,10 @@ const StrLenFn = struct {
 
 pub const StrToSexpsFn = struct {
     pub const name = "str->sexps";
-    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
         const args = vm.localStack();
         if (args.len != 1) {
-            return Val.FunctionError.WrongArity;
+            return function.Error.WrongArity;
         }
         const str = try args[0].toZig([]const u8, vm);
         var ast_builder = @import("AstBuilder.zig").init(vm, str);
@@ -90,12 +91,12 @@ pub const StrToSexpsFn = struct {
 
 pub const StrToSexpFn = struct {
     pub const name = "str->sexp";
-    pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
         const exprs = try (try StrToSexpsFn.fnImpl(vm)).toZig([]const Val, vm);
         switch (exprs.len) {
             0 => return Val.init(),
             1 => return exprs[0],
-            else => return Val.FunctionError.BadArg,
+            else => return function.Error.BadArg,
         }
     }
 };

@@ -5,6 +5,7 @@ const Instruction = @import("instruction.zig").Instruction;
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const function = @import("function.zig");
 
 const Compiler = @This();
 
@@ -328,12 +329,12 @@ fn compileFunction(self: *Compiler, args: []const Val, exprs: []const Val) !void
         try function_compiler.addLocal(arg_symbol.name);
     }
     try function_compiler.compileMultiExprs(exprs);
-    const bytecode = Val.ByteCodeFunction{
+    const bytecode = function.ByteCodeFunction{
         .name = try self.allocator().dupe(u8, self.define_context),
         .instructions = try function_compiler.ownedInstructions(),
         .args = @intCast(args.len),
     };
-    const bytecode_id = try self.vm.objects.put(Val.ByteCodeFunction, self.allocator(), bytecode);
+    const bytecode_id = try self.vm.objects.put(function.ByteCodeFunction, self.allocator(), bytecode);
     try self.instructions.append(
         self.allocator(),
         Instruction{ .push = bytecode_id.toVal() },
