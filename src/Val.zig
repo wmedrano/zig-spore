@@ -25,6 +25,7 @@ pub const ValTag = enum {
     float,
     string,
     symbol,
+    key,
     list,
     function,
     bytecode_function,
@@ -37,6 +38,7 @@ const ValRepr = union(ValTag) {
     float: f64,
     string: ObjectManager.Id(String),
     symbol: InternedSymbol,
+    key: InternedKey,
     list: ObjectManager.Id(List),
     function: *const FunctionVal,
     bytecode_function: ObjectManager.Id(ByteCodeFunction),
@@ -77,6 +79,11 @@ pub fn fromZig(comptime T: type, vm: *Vm, val: T) !Val {
             return interned_symbol.toVal();
         },
         InternedSymbol => return val.toVal(),
+        Symbol.Key => {
+            const interned_key = try InternedKey.fromKey(vm, val);
+            return interned_key.toVal();
+        },
+        InternedKey => return val.toVal(),
         []const Val => {
             const owned_list = try vm.allocator().dupe(Val, val);
             return fromOwnedList(vm, owned_list);
@@ -98,8 +105,8 @@ pub const ToZigError = error{
 /// - `i64`
 /// - `f64`
 /// - `[]const u8` (returns a slice pointing to the Val's internal string)
-/// - `Symbol`
-/// - `InternedSymbol`
+/// - `Symbol` or `InternedSymbol`
+/// - `Symbol.Key` or `InternedKey`
 /// - `[]const Val` (returns a slice pointing to the Val's internal list)
 ///
 /// Note: For slice types (`[]const u8`, `[]const Val`), the returned slice's
@@ -133,24 +140,41 @@ pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
             return ToZigError.WrongType;
         },
         .symbol => |interned_symbol| {
-            if (T == InternedSymbol) return interned_symbol;
-            if (T == Symbol) {
-                const maybe_symbol = vm.objects.symbols.internedSymbolToSymbol(interned_symbol);
-                if (maybe_symbol) |symbol| {
-                    return symbol;
-                }
-                return ToZigError.ObjectNotFound; // Treat as object not found.
+            switch (T) {
+                InternedSymbol => return interned_symbol,
+                Symbol => {
+                    const maybe_symbol = vm.objects.symbols.internedSymbolToSymbol(interned_symbol);
+                    if (maybe_symbol) |symbol| {
+                        return symbol;
+                    }
+                    return ToZigError.ObjectNotFound;
+                },
+                else => return ToZigError.WrongType,
             }
-            return ToZigError.WrongType;
+        },
+        .key => |interned_key| {
+            switch (T) {
+                InternedKey => return interned_key,
+                Symbol.Key => {
+                    const maybe_key = vm.objects.symbols.internedSymbolToSymbol(interned_key.repr);
+                    if (maybe_key) |k| {
+                        return Symbol.Key{ .name = k.name };
+                    }
+                    return ToZigError.ObjectNotFound;
+                },
+                else => return ToZigError.WrongType,
+            }
         },
         .list => {
-            if (T == []const Val) {
-                if (self.asList(vm)) |l| {
-                    return l;
-                }
-                return ToZigError.ObjectNotFound;
+            switch (T) {
+                []const Val => {
+                    if (self.asList(vm)) |l| {
+                        return l;
+                    }
+                    return ToZigError.ObjectNotFound;
+                },
+                else => return ToZigError.WrongType,
             }
-            return ToZigError.WrongType;
         },
         // Types not generally convertible back to simple Zig types.
         .function, .bytecode_function => return ToZigError.WrongType,
@@ -185,6 +209,13 @@ pub fn asInternedSymbol(self: Val) ?InternedSymbol {
     }
 }
 
+pub fn asInternedKey(self: Val) ?InternedKey {
+    switch (self.repr) {
+        .key => |k| return k,
+        else => return null,
+    }
+}
+
 /// Returns true if `Val` is an int.
 pub fn isInt(self: Val) bool {
     switch (self.repr) {
@@ -203,10 +234,15 @@ fn asString(self: Val, vm: *const Vm) ?[]const u8 {
     }
 }
 
-/// Get the underlying value as a `Symbol`.
-pub fn asSymbol(self: Val, vm: *const Vm) !?Symbol {
+fn asSymbol(self: Val, vm: *const Vm) !?Symbol {
     const symbol = if (self.asInternedSymbol()) |s| s else return null;
     return vm.objects.symbols.internedSymbolToSymbol(symbol);
+}
+
+fn asKey(self: Val, vm: *const Vm) !?Symbol.Key {
+    const interned_key = if (self.asInternedKey()) |k| k else return null;
+    const symbol = if (vm.objects.symbols.internedSymbolToSymbol(interned_key.repr)) |s| s else return null;
+    return .{ .name = symbol.name };
 }
 
 fn asList(self: Val, vm: *const Vm) ?[]const Val {
@@ -245,9 +281,17 @@ const FormattedVal = struct {
                 const string = try self.val.toZig([]const u8, self.vm);
                 try writer.print("\"{s}\"", .{string});
             },
-            .symbol => {
-                const symbol = self.val.asSymbol(self.vm);
-                try writer.print("{any}", .{symbol});
+            .symbol => |interned_symbol| {
+                if (try self.val.asSymbol(self.vm)) |s| {
+                    try writer.print("{any}", .{s});
+                } else {
+                    try writer.print("{any}", .{Symbol{ .quotes = interned_symbol.quotes, .name = "" }});
+                }
+            },
+            .key => if (try self.val.asKey(self.vm)) |k| {
+                try writer.print("{any}", .{k});
+            } else {
+                try writer.print("{any}", .{Symbol.Key{ .name = "" }});
             },
             .list => {
                 const list = self.val.asList(self.vm).?;
@@ -269,6 +313,22 @@ const FormattedVal = struct {
                 try writer.print("(function {any})", .{f.name});
             },
         }
+    }
+};
+
+pub const InternedKey = packed struct {
+    repr: InternedSymbol,
+
+    pub fn fromKey(vm: *Vm, key: Symbol.Key) !InternedKey {
+        const symbol = try vm.objects.symbols.strToSymbol(
+            vm.allocator(),
+            .{ .quotes = 0, .name = key.name },
+        );
+        return .{ .repr = symbol };
+    }
+
+    pub fn toVal(self: InternedKey) Val {
+        return .{ .repr = .{ .key = self } };
     }
 };
 

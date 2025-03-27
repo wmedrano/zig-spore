@@ -17,6 +17,7 @@ tokenizer: Tokenizer,
 
 pub const Error = error{
     TooManyQuotes,
+    EmptyKey,
     EmptySymbol,
     EmptyAtom,
     BadString,
@@ -53,6 +54,15 @@ pub fn next(self: *AstBuilder) Error!?Ast {
     return null;
 }
 
+pub fn parseAll(self: *AstBuilder, allocator: std.mem.Allocator) Error![]Ast {
+    var ret = std.ArrayListUnmanaged(Ast){};
+    defer ret.deinit(allocator);
+    while (try self.next()) |ast| {
+        try ret.append(allocator, ast);
+    }
+    return ret.toOwnedSlice(allocator);
+}
+
 fn parseList(self: *AstBuilder) Error![]Val {
     var list = std.ArrayListUnmanaged(Val){};
     defer list.deinit(self.vm.allocator());
@@ -84,6 +94,9 @@ fn atomToVal(vm: *Vm, atom: []const u8) Error!Val {
     }
     if (atom[0] == '\"') {
         return stringAtomToVal(vm, atom);
+    }
+    if (atom[0] == ':') {
+        return keyAtomToVal(vm, atom);
     }
     if (std.fmt.parseInt(i64, atom, 10)) |x| {
         return Val.fromZig(i64, vm, x);
@@ -121,4 +134,73 @@ fn stringAtomToVal(vm: *Vm, atom: []const u8) Error!Val {
     }
     // TODO: Use the owned value of ret.items to avoid allocation.
     return Val.fromZig([]const u8, vm, ret.items);
+}
+
+fn keyAtomToVal(vm: *Vm, atom: []const u8) Error!Val {
+    if (atom.len < 2) {
+        return Error.EmptyKey;
+    }
+    std.debug.assert(atom[0] == ':');
+    return Val.fromZig(Symbol.Key, vm, .{ .name = atom[1..] });
+}
+
+test "empty source produces no asts" {
+    var vm = try Vm.init(.{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    var ast_builder = AstBuilder.init(&vm, "");
+    const actual = try ast_builder.parseAll(std.testing.allocator);
+    defer std.testing.allocator.free(actual);
+    try std.testing.expectEqualDeep(
+        &[_]Ast{},
+        actual,
+    );
+}
+
+test "parse atoms" {
+    var vm = try Vm.init(.{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    var ast_builder = AstBuilder.init(&vm, "0 1.0 \"string\" symbol 'quoted-symbol :key true false");
+    const actual = try ast_builder.parseAll(std.testing.allocator);
+    defer std.testing.allocator.free(actual);
+    try std.testing.expectEqualDeep(
+        &[_]Ast{
+            .{
+                .location = .{ .start = 0, .end = 1 },
+                .expr = try Val.fromZig(i64, &vm, 0),
+            },
+            .{
+                .location = .{ .start = 2, .end = 5 },
+                .expr = try Val.fromZig(f64, &vm, 1.0),
+            },
+            .{
+                .location = .{ .start = 6, .end = 14 },
+                .expr = actual[2].expr,
+            },
+            .{
+                .location = .{ .start = 15, .end = 21 },
+                .expr = try Val.fromZig(Symbol, &vm, Symbol{ .quotes = 0, .name = "symbol" }),
+            },
+            .{
+                .location = .{ .start = 22, .end = 36 },
+                .expr = try Val.fromZig(Symbol, &vm, .{ .quotes = 1, .name = "quoted-symbol" }),
+            },
+            .{
+                .location = .{ .start = 37, .end = 41 },
+                .expr = try Val.fromZig(Symbol.Key, &vm, Symbol.Key{ .name = "key" }),
+            },
+            .{
+                .location = .{ .start = 42, .end = 46 },
+                .expr = try Val.fromZig(bool, &vm, true),
+            },
+            .{
+                .location = .{ .start = 47, .end = 52 },
+                .expr = try Val.fromZig(bool, &vm, false),
+            },
+        },
+        actual,
+    );
+    try std.testing.expectEqualStrings(
+        "string",
+        try actual[2].expr.toZig([]const u8, &vm),
+    );
 }

@@ -9,6 +9,21 @@ pub const FromStrError = error{ TooManyQuotes, EmptySymbol };
 quotes: u2,
 name: []const u8,
 
+pub const Key = struct {
+    name: []const u8,
+
+    pub fn format(
+        self: Key,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print(":{s}", .{self.name});
+    }
+};
+
 /// Create a new symbol from a string.
 ///
 /// Any leading `'` are parsed as quotes.

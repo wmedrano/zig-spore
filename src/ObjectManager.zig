@@ -46,6 +46,7 @@ pub fn markReachable(self: *ObjectManager, val: Val) void {
         .float => {},
         .string => |id| self.strings.markReachable(id, self),
         .symbol => {},
+        .key => {},
         .function => {},
         .list => |id| self.lists.markReachable(id, self),
         .bytecode_function => |id| self.bytecode_functions.markReachable(id, self),
