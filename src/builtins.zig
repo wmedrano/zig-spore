@@ -82,7 +82,7 @@ pub const StrToSexpsFn = struct {
         const str = try args[0].toZig([]const u8, vm);
         var ast_builder = @import("AstBuilder.zig").init(vm, str);
         while (try ast_builder.next()) |ast| {
-            try vm.pushStackVal(ast.expr);
+            try vm.pushStackVals(&.{ast.expr});
         }
         const exprs = vm.localStack()[1..];
         return Val.fromZig([]const Val, vm, exprs);

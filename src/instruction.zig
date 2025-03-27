@@ -58,7 +58,7 @@ pub const Instruction = union(InstructionTag) {
     }
 
     fn executePush(vm: *Vm, val: Val) !void {
-        try vm.pushStackVal(val);
+        try vm.pushStackVals(&.{val});
     }
 
     fn executeEval(vm: *Vm, n: u32) !void {

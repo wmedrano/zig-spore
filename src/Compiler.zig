@@ -5,22 +5,10 @@ const Instruction = @import("instruction.zig").Instruction;
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const builtin_macros = @import("builtin_macros.zig");
 const function = @import("function.zig");
 
 const Compiler = @This();
-
-const Error = error{
-    BadDefine,
-    BadFunction,
-    BadIf,
-    BadWhen,
-    ExpectedIdentifier,
-    NotImplemented,
-    ObjectNotFound,
-    TooManyQuotes,
-    UnexpectedEmptyExpression,
-    WrongType,
-} || Allocator.Error;
 
 vm: *Vm,
 instructions: std.ArrayListUnmanaged(Instruction),
@@ -92,22 +80,30 @@ fn ownedInstructions(self: *Compiler) ![]Instruction {
 
 fn macroExpand(self: *Compiler, ast: Val) !?Val {
     const expr = ast.toZig([]const Val, self.vm) catch return null;
-    if (try self.macroExpandDef(expr)) |v| {
-        return if (try self.macroExpand(v)) |x| x else v;
+    if (expr.len == 0) {
+        return null;
     }
-    if (try self.macroExpandDefun(expr)) |v| {
-        return if (try self.macroExpand(v)) |x| x else v;
-    }
-    if (try self.macroExpandWhen(expr)) |v| {
-        return if (try self.macroExpand(v)) |x| x else v;
-    }
+    // TODO: Verify correctness of macro expansion order.
     if (try self.macroExpandSubexpressions(expr)) |v| {
         return if (try self.macroExpand(v)) |x| x else v;
+    }
+    const leading_symbol = if (expr[0].asInternedSymbol()) |x| x else return null;
+    const macro_fn: ?*const function.FunctionVal = if (leading_symbol.eql(self.def_symbol))
+        function.FunctionVal.init(builtin_macros.DefMacro)
+    else if (leading_symbol.eql(self.defun_symbol))
+        function.FunctionVal.init(builtin_macros.DefunMacro)
+    else if (leading_symbol.eql(self.when_symbol))
+        function.FunctionVal.init(builtin_macros.WhenMacro)
+    else
+        null;
+    if (macro_fn) |f| {
+        const expanded = try f.executeWith(self.vm, expr[1..]);
+        return if (try self.macroExpand(expanded)) |x| x else expanded;
     }
     return null;
 }
 
-fn macroExpandSubexpressions(self: *Compiler, expr: []const Val) Error!?Val {
+fn macroExpandSubexpressions(self: *Compiler, expr: []const Val) function.Error!?Val {
     var expandedExpr: ?[]Val = null;
     defer if (expandedExpr) |v| self.allocator().free(v);
     for (expr, 0..expr.len) |sub_expr, idx| {
@@ -126,85 +122,7 @@ fn macroExpandSubexpressions(self: *Compiler, expr: []const Val) Error!?Val {
     return null;
 }
 
-fn macroExpandDefun(self: *Compiler, expr: []const Val) !?Val {
-    if (expr.len == 0) {
-        return null;
-    }
-    const leading_symbol = if (expr[0].asInternedSymbol()) |x| x else return null;
-    if (leading_symbol.eql(self.defun_symbol)) {
-        if (expr.len < 4) {
-            return Error.BadDefine;
-        }
-        const name = if (expr[1].asInternedSymbol()) |s| s else return Error.BadDefine;
-        const args = expr[2];
-        const body = expr[3..];
-        var function_expr = try std.ArrayListUnmanaged(Val).initCapacity(
-            self.allocator(),
-            2 + body.len,
-        );
-        defer function_expr.deinit(self.allocator());
-        function_expr.appendAssumeCapacity(self.function_symbol.toVal());
-        function_expr.appendAssumeCapacity(args);
-        function_expr.appendSliceAssumeCapacity(body);
-        const function_expr_val = try Val.fromOwnedList(
-            self.vm,
-            try function_expr.toOwnedSlice(self.allocator()),
-        );
-        return try Val.fromZig(
-            []const Val,
-            self.vm,
-            &.{
-                self.internal_define_symbol.toVal(),
-                name.quoted().toVal(),
-                function_expr_val,
-            },
-        );
-    }
-    return null;
-}
-
-fn macroExpandWhen(self: *Compiler, expr: []const Val) !?Val {
-    if (expr.len == 0) {
-        return null;
-    }
-    const leading_symbol = if (expr[0].asInternedSymbol()) |x| x else return null;
-    if (leading_symbol.eql(self.when_symbol)) {
-        if (expr.len < 3) {
-            return Error.BadWhen;
-        }
-        var body_expr = try self.allocator().dupe(Val, expr[1..]);
-        defer self.allocator().free(body_expr);
-        body_expr[0] = self.do_symbol.toVal();
-        const expanded = try Val.fromZig([]const Val, self.vm, &.{
-            self.if_symbol.toVal(),
-            expr[1],
-            try Val.fromZig([]const Val, self.vm, body_expr),
-        });
-        return expanded;
-    }
-    return null;
-}
-
-fn macroExpandDef(self: *Compiler, expr: []const Val) !?Val {
-    if (expr.len == 0) {
-        return null;
-    }
-    const leading_symbol = if (expr[0].asInternedSymbol()) |x| x else return null;
-    if (leading_symbol.eql(self.def_symbol)) {
-        if (expr.len != 3) {
-            return Error.BadDefine;
-        }
-        const symbol = if (expr[1].asInternedSymbol()) |x| x.quoted() else return Error.ExpectedIdentifier;
-        return try Val.fromZig([]const Val, self.vm, &.{
-            self.internal_define_symbol.toVal(),
-            symbol.toVal(),
-            expr[2],
-        });
-    }
-    return null;
-}
-
-fn compileOne(self: *Compiler, unexpanded_ast: Val) Error!void {
+fn compileOne(self: *Compiler, unexpanded_ast: Val) function.Error!void {
     const ast = if (try self.macroExpand(unexpanded_ast)) |v| v else unexpanded_ast;
     switch (ast.repr) {
         .list => |list_id| {
@@ -219,7 +137,7 @@ fn compileOne(self: *Compiler, unexpanded_ast: Val) Error!void {
     }
 }
 
-fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) Error!void {
+fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) function.Error!void {
     if (symbol.quotes > 0) {
         try self.instructions.append(
             self.allocator(),
@@ -248,20 +166,20 @@ fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) Error!void {
     );
 }
 
-fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
+fn compileTree(self: *Compiler, nodes: []const Val) function.Error!void {
     if (nodes.len == 0) {
-        return Error.UnexpectedEmptyExpression;
+        return function.Error.UnexpectedEmptyExpression;
     }
     if (nodes[0].asInternedSymbol()) |leading_symbol| {
         if (leading_symbol.eql(self.function_symbol)) {
             if (nodes.len < 3) {
-                return Error.BadFunction;
+                return function.Error.BadFunction;
             }
-            const args = nodes[1].toZig([]const Val, self.vm) catch return Error.BadFunction;
+            const args = nodes[1].toZig([]const Val, self.vm) catch return function.Error.BadFunction;
             return self.compileFunction(args, nodes[2..]);
         } else if (leading_symbol.eql(self.internal_define_symbol)) {
             if (nodes.len < 2) {
-                return Error.BadDefine;
+                return function.Error.BadDefine;
             }
             if (nodes[1].asInternedSymbol()) |s| {
                 const old_context = self.define_context;
@@ -269,7 +187,7 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
                 self.define_context = blk: {
                     if (s.toSymbol(self.vm)) |name| {
                         if (name.quotes > 1) {
-                            return Error.TooManyQuotes;
+                            return function.Error.TooManyQuotes;
                         }
                         break :blk name.name;
                     } else {
@@ -281,7 +199,7 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
             switch (nodes.len) {
                 3 => return self.compileIf(nodes[1], nodes[2], Val.init()),
                 4 => return self.compileIf(nodes[1], nodes[2], nodes[3]),
-                else => return Error.BadIf,
+                else => return function.Error.BadIf,
             }
         }
     }
@@ -294,7 +212,7 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
     );
 }
 
-fn compileIf(self: *Compiler, pred: Val, true_branch: Val, false_branch: Val) Error!void {
+fn compileIf(self: *Compiler, pred: Val, true_branch: Val, false_branch: Val) function.Error!void {
     try self.compileOne(pred);
     const jump_if_idx = self.instructions.items.len;
     try self.instructions.append(
@@ -324,8 +242,8 @@ fn compileFunction(self: *Compiler, args: []const Val, exprs: []const Val) !void
     var function_compiler = try Compiler.init(self.vm);
     defer function_compiler.deinit();
     for (args) |arg| {
-        const arg_symbol = arg.toZig(Symbol, self.vm) catch return Error.BadFunction;
-        if (arg_symbol.quotes != 0) return Error.BadFunction;
+        const arg_symbol = arg.toZig(Symbol, self.vm) catch return function.Error.BadFunction;
+        if (arg_symbol.quotes != 0) return function.Error.BadFunction;
         try function_compiler.addLocal(arg_symbol.name);
     }
     try function_compiler.compileMultiExprs(exprs);

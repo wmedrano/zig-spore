@@ -8,12 +8,24 @@ const function = @import("function.zig");
 
 pub const Error = error{
     BadArg,
+    BadDefine,
+    BadFunction,
+    BadIf,
+    BadString,
+    BadWhen,
+    EmptyAtom,
+    EmptyKey,
+    EmptySymbol,
+    ExpectedIdentifier,
     NotImplemented,
     ObjectNotFound,
     StackOverflow,
+    TooManyQuotes,
+    UnexpectedCloseParen,
+    UnexpectedEmptyExpression,
     WrongArity,
     WrongType,
-} || @import("AstBuilder.zig").Error || std.mem.Allocator.Error;
+} || std.mem.Allocator.Error;
 
 pub const ByteCodeFunction = struct {
     name: []const u8,
@@ -43,6 +55,10 @@ pub const ByteCodeFunction = struct {
         }
     }
 
+    /// Start the execution of `self` on `vm`.
+    ///
+    /// Note that `Vm` must run in order for the function to fully
+    /// evaluate. `startExecute` only begins the execution.
     pub fn startExecute(self: ByteCodeFunction, vm: *Vm, stack_start: usize) !void {
         const arg_count = vm.stack_len - stack_start;
         if (self.args != arg_count) return function.Error.WrongArity;
@@ -85,7 +101,14 @@ pub const FunctionVal = struct {
         return &wrapped_function.FUNCTION;
     }
 
-    /// Execute `self` on `vm` with arguments starting at `stack_start`.
+    /// Execute `self` on`vm` with `args`.
+    pub fn executeWith(self: FunctionVal, vm: *Vm, args: []const Val) !Val {
+        const stack_start = vm.stack_len;
+        try vm.pushStackVals(args);
+        return self.execute(vm, stack_start);
+    }
+
+    /// Execute `self` with the local stack starting at `stack_start`.
     ///
     /// The result value is returned and the stack is truncated to end
     /// (and exclude) `stack_start`.

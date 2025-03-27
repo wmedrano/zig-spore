@@ -162,13 +162,15 @@ pub fn localStack(self: *Vm) []Val {
     return self.stack[stack_start..self.stack_len];
 }
 
-/// Push a new value to the virtual machine's stack.
-pub fn pushStackVal(self: *Vm, val: Val) !void {
-    if (self.stack_len < self.stack.len) {
-        self.stack[self.stack_len] = val;
-        self.stack_len += 1;
-    } else {
-        return function.Error.StackOverflow;
+/// Push new values to the virtual machine's stack.
+pub fn pushStackVals(self: *Vm, vals: []const Val) !void {
+    for (vals) |val| {
+        if (self.stack_len < self.stack.len) {
+            self.stack[self.stack_len] = val;
+            self.stack_len += 1;
+        } else {
+            return function.Error.StackOverflow;
+        }
     }
 }
 
