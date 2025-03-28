@@ -22,6 +22,7 @@ function_symbol: Symbol.Interned,
 do_symbol: Symbol.Interned,
 if_symbol: Symbol.Interned,
 when_symbol: Symbol.Interned,
+minus_symbol: Symbol.Interned,
 
 /// Initialize a new compiler for a `Vm`.
 pub fn init(vm: *Vm) !Compiler {
@@ -37,6 +38,7 @@ pub fn init(vm: *Vm) !Compiler {
         .do_symbol = try (Symbol{ .quotes = 0, .name = "do" }).intern(vm),
         .if_symbol = try (Symbol{ .quotes = 0, .name = "if" }).intern(vm),
         .when_symbol = try (Symbol{ .quotes = 0, .name = "when" }).intern(vm),
+        .minus_symbol = try (Symbol{ .quotes = 0, .name = "-" }).intern(vm),
     };
 }
 
@@ -94,6 +96,8 @@ fn macroExpand(self: *Compiler, ast: Val) !?Val {
         function.FunctionVal.init(builtin_macros.DefunMacro)
     else if (leading_symbol.eql(self.when_symbol))
         function.FunctionVal.init(builtin_macros.WhenMacro)
+    else if (leading_symbol.eql(self.minus_symbol))
+        function.FunctionVal.init(builtin_macros.SubtractMacro)
     else
         null;
     if (macro_fn) |f| {
@@ -114,9 +118,8 @@ fn macroExpandSubexpressions(self: *Compiler, expr: []const Val) function.Error!
             expandedExpr.?[idx] = v;
         }
     }
-    if (expandedExpr) |v| {
-        const list_val = try Val.fromZig([]const Val, self.vm, v);
-        expandedExpr = null;
+    if (expandedExpr) |vals| {
+        const list_val = try Val.fromZig([]const Val, self.vm, vals);
         return list_val;
     }
     return null;

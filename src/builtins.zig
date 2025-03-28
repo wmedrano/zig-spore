@@ -10,6 +10,7 @@ pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, DefineFn);
     try vm.global.registerFunction(vm, DoFn);
     try vm.global.registerFunction(vm, PlusFn);
+    try vm.global.registerFunction(vm, NegateFn);
     try vm.global.registerFunction(vm, LessFn);
     try vm.global.registerFunction(vm, StrLenFn);
     try vm.global.registerFunction(vm, StrToSexpsFn);
@@ -52,6 +53,20 @@ const PlusFn = struct {
             return Val.fromZig(f64, vm, float_sum + int_sum_as_float);
         }
         return Val.fromZig(i64, vm, int_sum);
+    }
+};
+
+const NegateFn = struct {
+    pub const name = "negate";
+
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
+        const args = vm.localStack();
+        if (args.len != 1) return function.Error.WrongArity;
+        switch (args[0].repr) {
+            .int => |x| return Val.fromZig(i64, vm, -x),
+            .float => |x| return Val.fromZig(f64, vm, -x),
+            else => return function.Error.WrongType,
+        }
     }
 };
 
