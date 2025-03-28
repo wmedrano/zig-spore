@@ -93,6 +93,17 @@ test "function call with wrong args returns error" {
     try std.testing.expectError(error.WrongArity, vm.evalStr(i64, "(foo 1 2)"));
 }
 
+test "can eval recursive function" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.evalStr(void, "(defun fib (n) (if (< n 2) n (+ (fib (+ n -1)) (fib (+ n -2)))))");
+    vm.options.log = true;
+    try std.testing.expectEqual(
+        55,
+        try vm.evalStr(i64, "(fib 10)"),
+    );
+}
+
 const Add2Fn = struct {
     pub const name = "add-2";
     pub fn fnImpl(vm: *Vm) function.Error!Val {

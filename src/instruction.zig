@@ -24,6 +24,12 @@ pub const Instruction = union(InstructionTag) {
     jump: u32,
     ret,
 
+    /// Get an instruction that can be pretty printed.
+    pub fn formatted(self: Instruction, vm: *const Vm) FormattedInstruction {
+        return .{ .instruction = self, .vm = vm };
+    }
+
+    /// Execute an instruction on `vm`.
     pub fn execute(self: Instruction, vm: *Vm) !?Val {
         const ret = blk: {
             switch (self) {
@@ -76,8 +82,9 @@ pub const Instruction = union(InstructionTag) {
                 try bytecode.startExecute(vm, stack_start);
             },
             else => {
-                if (vm.options.log)
+                if (vm.options.log) {
                     std.log.err("Value {any} not callable.", .{function_val.formatted(vm)});
+                }
                 return error.ValueNotCallable;
             },
         }
@@ -117,7 +124,33 @@ pub const Instruction = union(InstructionTag) {
 
     fn executeRet(vm: *Vm) !Val {
         const ret = try vm.popStackFrame();
-        try executePush(vm, ret);
+        if (vm.stack_len > 0) {
+            vm.stack[vm.stack_len - 1] = ret;
+        }
         return ret;
+    }
+};
+
+pub const FormattedInstruction = struct {
+    instruction: Instruction,
+    vm: *const Vm,
+
+    pub fn format(
+        self: FormattedInstruction,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        switch (self.instruction) {
+            .push => |v| try writer.print("(push {any})", .{v.formatted(self.vm)}),
+            .eval => |n| try writer.print("(eval {d})", .{n}),
+            .get_local => |n| try writer.print("(get-local {d})", .{n}),
+            .deref => |interned_symbol| try writer.print("(deref {any})", .{interned_symbol.toVal().formatted(self.vm)}),
+            .jump_if => |n| try writer.print("(jump-if {d})", .{n}),
+            .jump => |n| try writer.print("(jump {d})", .{n}),
+            .ret => try writer.print("(return)", .{}),
+        }
     }
 };
