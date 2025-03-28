@@ -1,4 +1,7 @@
 const std = @import("std");
+
+const ByteCodeFunction = @import("function.zig").ByteCodeFunction;
+const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 const function = @import("function.zig");
@@ -11,6 +14,7 @@ pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, StrLenFn);
     try vm.global.registerFunction(vm, StrToSexpsFn);
     try vm.global.registerFunction(vm, StrToSexpFn);
+    try vm.global.registerFunction(vm, FunctionByteCode);
 }
 
 const DefineFn = struct {
@@ -135,6 +139,45 @@ pub const StrToSexpFn = struct {
             1 => return exprs[0],
             else => return function.Error.BadArg,
         }
+    }
+};
+
+pub const FunctionByteCode = struct {
+    pub const name = "function-bytecode";
+    pub fn fnImpl(vm: *Vm) function.Error!Val {
+        const args = vm.localStack();
+        if (args.len != 1) return function.Error.WrongArity;
+        const func = switch (args[0].repr) {
+            .bytecode_function => |id| vm.objects.get(ByteCodeFunction, id).?,
+            else => return function.Error.WrongType,
+        };
+        var ret = try vm.allocator().alloc(Val, func.instructions.len);
+        defer vm.allocator().free(ret);
+        for (0..func.instructions.len, func.instructions) |idx, instruction| {
+            const code = switch (instruction) {
+                .push => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "push" }),
+                .eval => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "eval" }),
+                .get_local => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "get_local" }),
+                .deref => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "deref" }),
+                .jump_if => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "jump_if" }),
+                .jump => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "jump" }),
+                .ret => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "ret" }),
+            };
+            const data: ?Val = switch (instruction) {
+                .push => |v| v,
+                .eval => |n| try Val.fromZig(i64, vm, @intCast(n)),
+                .get_local => |n| try Val.fromZig(i64, vm, @intCast(n)),
+                .deref => |sym| sym.toVal(),
+                .jump_if => |n| try Val.fromZig(i64, vm, n),
+                .jump => |n| try Val.fromZig(i64, vm, n),
+                .ret => null,
+            };
+            ret[idx] = if (data) |d|
+                try Val.fromZig([]const Val, vm, &[_]Val{ code, d })
+            else
+                try Val.fromZig([]const Val, vm, &[_]Val{code});
+        }
+        return try Val.fromZig([]const Val, vm, ret);
     }
 };
 
