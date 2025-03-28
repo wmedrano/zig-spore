@@ -64,18 +64,18 @@ pub const Instruction = union(InstructionTag) {
     }
 
     fn executePush(vm: *Vm, val: Val) !void {
-        try vm.pushStackVals(&.{val});
+        try vm.stack.push(val);
     }
 
     fn executeEval(vm: *Vm, n: u32) !void {
         if (n == 0) return function.Error.WrongArity;
-        const function_idx = vm.stack_len - n;
+        const function_idx = vm.stack.items.len - n;
         const stack_start = function_idx + 1;
-        const function_val = vm.stack[function_idx];
+        const function_val = vm.stack.items[function_idx];
         switch (function_val.repr) {
             .function => |f| {
                 const result = try f.execute(vm, stack_start);
-                vm.stack[function_idx] = result;
+                vm.stack.items[function_idx] = result;
             },
             .bytecode_function => |bytecode_id| {
                 const bytecode = vm.objects.get(function.ByteCodeFunction, bytecode_id).?;
@@ -91,7 +91,7 @@ pub const Instruction = union(InstructionTag) {
     }
 
     fn executeGetLocal(vm: *Vm, idx: u32) !void {
-        const val = vm.localStack()[idx];
+        const val = vm.stack.local()[idx];
         try executePush(vm, val);
     }
 
@@ -110,22 +110,22 @@ pub const Instruction = union(InstructionTag) {
     }
 
     fn executeJumpIf(vm: *Vm, n: u32) void {
-        const val = vm.popStackVal();
+        const val = vm.stack.pop();
         if (val.isTruthy()) {
             executeJump(vm, n);
         }
     }
 
     fn executeJump(vm: *Vm, n: u32) void {
-        if (vm.stack_frames.items.len == 0) return;
-        const stack_frame_idx = vm.stack_frames.items.len - 1;
-        vm.stack_frames.items[stack_frame_idx].next_instruction += n;
+        if (vm.stack.frames.items.len == 0) return;
+        const stack_frame_idx = vm.stack.frames.items.len - 1;
+        vm.stack.frames.items[stack_frame_idx].next_instruction += n;
     }
 
     fn executeRet(vm: *Vm) !Val {
-        const ret = try vm.popStackFrame();
-        if (vm.stack_len > 0) {
-            vm.stack[vm.stack_len - 1] = ret;
+        const ret = try vm.stack.popFrame();
+        if (vm.stack.items.len > 0) {
+            vm.stack.items[vm.stack.items.len - 1] = ret;
         }
         return ret;
     }

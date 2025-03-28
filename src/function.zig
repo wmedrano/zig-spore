@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Instruction = @import("instruction.zig").Instruction;
 const ObjectManager = @import("ObjectManager.zig");
+const Stack = @import("Stack.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 const function = @import("function.zig");
@@ -62,10 +63,10 @@ pub const ByteCodeFunction = struct {
     /// Note that `Vm` must run in order for the function to fully
     /// evaluate. `startExecute` only begins the execution.
     pub fn startExecute(self: ByteCodeFunction, vm: *Vm, stack_start: usize) !void {
-        const arg_count = vm.stack_len - stack_start;
+        const arg_count = vm.stack.items.len - stack_start;
         if (self.args != arg_count) return function.Error.WrongArity;
-        try vm.pushStackFrame(
-            Vm.StackFrame{
+        try vm.stack.pushFrame(
+            Stack.Frame{
                 .instructions = self.instructions,
                 .stack_start = stack_start,
                 .next_instruction = 0,
@@ -85,7 +86,7 @@ pub const FunctionVal = struct {
     /// const Add2Fn = struct {
     ///     pub const name = "add-2";
     ///     pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
-    ///         const args = vm.localStack();
+    ///         const args = vm.stack.local();
     ///         if (args.len != 1) return Val.FunctionError.WrongArity;
     ///         const arg = try args[0].toZig(i64, vm);
     ///         return Val.fromZig(i64, vm, 2 + arg);
@@ -105,8 +106,8 @@ pub const FunctionVal = struct {
 
     /// Execute `self` on`vm` with `args`.
     pub fn executeWith(self: FunctionVal, vm: *Vm, args: []const Val) !Val {
-        const stack_start = vm.stack_len;
-        try vm.pushStackVals(args);
+        const stack_start = vm.stack.items.len;
+        try vm.stack.pushMany(args);
         return self.execute(vm, stack_start);
     }
 
@@ -115,16 +116,16 @@ pub const FunctionVal = struct {
     /// The result value is returned and the stack is truncated to end
     /// (and exclude) `stack_start`.
     pub fn execute(self: FunctionVal, vm: *Vm, stack_start: usize) !Val {
-        try vm.pushStackFrame(
-            Vm.StackFrame{
+        try vm.stack.pushFrame(
+            Stack.Frame{
                 .instructions = &.{},
                 .stack_start = stack_start,
                 .next_instruction = 0,
             },
         );
         const result = try self.function(vm);
-        vm.stack_len = stack_start;
-        _ = try vm.popStackFrame();
+        vm.stack.items.len = stack_start;
+        _ = try vm.stack.popFrame();
         return result;
     }
 };

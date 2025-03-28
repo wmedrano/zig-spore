@@ -12,7 +12,7 @@ pub const DefMacro = struct {
 
     pub fn fnImpl(vm: *Vm) function.Error!Val {
         const internal_define_symbol = try (Symbol{ .quotes = 0, .name = "%define" }).intern(vm);
-        const expr = vm.localStack();
+        const expr = vm.stack.local();
         if (expr.len != 2) {
             return function.Error.BadDefine;
         }
@@ -31,7 +31,7 @@ pub const DefunMacro = struct {
     pub fn fnImpl(vm: *Vm) function.Error!Val {
         const internal_define_symbol = try (Symbol{ .quotes = 0, .name = "%define" }).intern(vm);
         const function_symbol = try (Symbol{ .quotes = 0, .name = "function" }).intern(vm);
-        const expr = vm.localStack();
+        const expr = vm.stack.local();
         if (expr.len < 3) {
             return function.Error.BadDefine;
         }
@@ -68,7 +68,7 @@ pub const WhenMacro = struct {
     pub fn fnImpl(vm: *Vm) function.Error!Val {
         const if_symbol = try (Symbol{ .quotes = 0, .name = "if" }).intern(vm);
         const do_symbol = try (Symbol{ .quotes = 0, .name = "do" }).intern(vm);
-        const expr = vm.localStack();
+        const expr = vm.stack.local();
         if (expr.len < 2) {
             return function.Error.BadWhen;
         }
@@ -88,7 +88,7 @@ pub const SubtractMacro = struct {
     pub const name = "%subtract-macro";
 
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         if (args.len == 0) {
             return function.Error.WrongArity;
         }

@@ -47,26 +47,37 @@ pub fn deinit(self: *Compiler) void {
     self.locals.deinit(self.allocator());
 }
 
-pub fn currentExpr(self: *Compiler) []Instruction {
-    return self.instructions.items;
-}
-
-pub fn compile(self: *Compiler, expr: Val) !void {
+pub fn compile(self: *Compiler, expr: Val) ![]Instruction {
     try self.compileMultiExprs(&.{expr});
+    return self.instructions.toOwnedSlice(self.allocator());
 }
 
 fn addLocal(self: *Compiler, name: []const u8) !void {
     try self.locals.append(self.allocator(), name);
 }
 
-fn localIdx(self: *Compiler, name: []const u8) ?u32 {
-    if (self.locals.items.len == 0) return null;
+const ResolvedName = union(enum) {
+    local: u32,
+    global: Symbol.Interned,
+
+    fn toInstruction(self: ResolvedName) Instruction {
+        switch (self) {
+            .local => |idx| return .{ .get_local = idx },
+            .global => |sym| return .{ .deref = sym },
+        }
+    }
+};
+
+fn resolveIdentifier(self: *Compiler, name: []const u8) !ResolvedName {
     var idx = self.locals.items.len;
     while (idx > 0) {
         idx -= 1;
-        if (std.mem.eql(u8, self.locals.items[idx], name)) return @intCast(idx);
+        if (std.mem.eql(u8, self.locals.items[idx], name)) {
+            return .{ .local = @intCast(idx) };
+        }
     }
-    return null;
+    const symbol = try Symbol.fromStr(name);
+    return .{ .global = try symbol.intern(self.vm) };
 }
 
 fn compileMultiExprs(self: *Compiler, exprs: []const Val) !void {
@@ -141,7 +152,7 @@ fn compileOne(self: *Compiler, unexpanded_ast: Val) function.Error!void {
 }
 
 fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) function.Error!void {
-    if (symbol.quotes > 0) {
+    if (symbol.quotes != 0) {
         try self.instructions.append(
             self.allocator(),
             Instruction{
@@ -155,13 +166,12 @@ fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) function.Error!void {
         return;
     }
     if (symbol.toSymbol(self.vm)) |named_symbol| {
-        if (self.localIdx(named_symbol.name)) |idx| {
-            try self.instructions.append(
-                self.allocator(),
-                Instruction{ .get_local = idx },
-            );
-            return;
-        }
+        const resolved = try self.resolveIdentifier(named_symbol.name);
+        try self.instructions.append(
+            self.allocator(),
+            resolved.toInstruction(),
+        );
+        return;
     }
     try self.instructions.append(
         self.allocator(),

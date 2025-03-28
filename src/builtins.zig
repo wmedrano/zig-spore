@@ -22,7 +22,7 @@ const DefineFn = struct {
     pub const name = "%define";
 
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         if (args.len != 2) {
             return function.Error.WrongArity;
         }
@@ -40,7 +40,7 @@ const PlusFn = struct {
         var int_sum: i64 = 0;
         var float_sum: f64 = 0.0;
         var has_float = false;
-        for (vm.localStack()) |v| {
+        for (vm.stack.local()) |v| {
             if (v.isInt()) {
                 int_sum += try v.toZig(i64, vm);
             } else {
@@ -60,7 +60,7 @@ const NegateFn = struct {
     pub const name = "negate";
 
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         if (args.len != 1) return function.Error.WrongArity;
         switch (args[0].repr) {
             .int => |x| return Val.fromZig(i64, vm, -x),
@@ -74,7 +74,7 @@ const LessFn = struct {
     pub const name = "<";
 
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         const arg_count = args.len;
         if (arg_count == 0) return Val.fromZig(bool, vm, true);
         if (arg_count == 1) if (args[0].isNumber()) return Val.fromZig(bool, vm, true) else return function.Error.WrongType;
@@ -110,7 +110,7 @@ const DoFn = struct {
     pub const name = "do";
 
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         if (args.len == 0) return Val.init();
         return args[args.len - 1];
     }
@@ -119,7 +119,7 @@ const DoFn = struct {
 const StrLenFn = struct {
     pub const name = "str-len";
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         if (args.len != 1) {
             return function.Error.WrongArity;
         }
@@ -131,16 +131,16 @@ const StrLenFn = struct {
 pub const StrToSexpsFn = struct {
     pub const name = "str->sexps";
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         if (args.len != 1) {
             return function.Error.WrongArity;
         }
         const str = try args[0].toZig([]const u8, vm);
         var ast_builder = @import("AstBuilder.zig").init(vm, str);
         while (try ast_builder.next()) |ast| {
-            try vm.pushStackVals(&.{ast.expr});
+            try vm.stack.push(ast.expr);
         }
-        const exprs = vm.localStack()[1..];
+        const exprs = vm.stack.local()[1..];
         return Val.fromZig([]const Val, vm, exprs);
     }
 };
@@ -160,7 +160,7 @@ pub const StrToSexpFn = struct {
 pub const FunctionByteCode = struct {
     pub const name = "function-bytecode";
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         if (args.len != 1) return function.Error.WrongArity;
         const func = switch (args[0].repr) {
             .bytecode_function => |id| vm.objects.get(ByteCodeFunction, id).?,

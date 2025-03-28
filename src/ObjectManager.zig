@@ -1,10 +1,9 @@
 const std = @import("std");
 
+const ObjectManager = @This();
 const StringInterner = @import("StringInterner.zig");
 const Val = @import("Val.zig");
 const function = @import("function.zig");
-
-const ObjectManager = @This();
 
 string_interner: StringInterner = .{},
 strings: ObjectStorage(Val.String) = .{},

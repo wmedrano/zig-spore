@@ -107,7 +107,7 @@ test "can eval recursive function" {
 const Add2Fn = struct {
     pub const name = "add-2";
     pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.localStack();
+        const args = vm.stack.local();
         if (args.len != 1) return function.Error.WrongArity;
         const arg = try args[0].toZig(i64, vm);
         return Val.fromZig(i64, vm, 2 + arg);
