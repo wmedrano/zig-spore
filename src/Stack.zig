@@ -1,13 +1,19 @@
 const std = @import("std");
 const Instruction = @import("instruction.zig").Instruction;
 const Val = @import("Val.zig");
+const Vm = @import("Vm.zig");
 const function = @import("function.zig");
 
 const Stack = @This();
 
 const max_stack_len = 4096;
 
+/// All items contained on the stack across all frames.
 items: []Val,
+
+/// All available frames.
+///
+/// A frame stores information about each function call.
 frames: std.ArrayListUnmanaged(Frame),
 
 /// Defines a function call.
@@ -20,6 +26,7 @@ pub const Frame = struct {
     next_instruction: usize,
 };
 
+/// Initialize a new `Stack`.
 pub fn init(allocator: std.mem.Allocator) !Stack {
     var items = try allocator.alloc(Val, max_stack_len);
     items.len = 0;
@@ -31,25 +38,13 @@ pub fn init(allocator: std.mem.Allocator) !Stack {
 }
 
 pub fn deinit(self: *Stack, allocator: std.mem.Allocator) void {
-    var allocated = self.items;
-    allocated.len = max_stack_len;
-    allocator.free(allocated);
+    allocator.free(self.items.ptr[0..max_stack_len]);
     self.frames.deinit(allocator);
 }
 
 pub fn reset(self: *Stack) void {
     self.items.len = 0;
     self.frames.clearRetainingCapacity();
-}
-
-/// Get the values in the current function call's stack.
-///
-/// On a fresh function call, this is equivalent to getting the
-/// function's arguments. Performing operations like evaluating more
-/// code may mutate the local stack.
-pub fn local(self: Stack) []Val {
-    const stack_start = if (self.frames.getLastOrNull()) |sf| sf.stack_start else return &.{};
-    return self.items[stack_start..self.items.len];
 }
 
 /// Pop the top value of the stack.
@@ -102,4 +97,14 @@ pub fn popFrame(self: *Stack) function.Error!Val {
         Val.init();
     self.items.len = frame.stack_start;
     return return_value;
+}
+
+/// Get the values in the current function call's stack.
+///
+/// On a fresh function call, this is equivalent to getting the
+/// function's arguments. Performing operations like evaluating more
+/// code may mutate the local stack.
+pub fn local(self: Stack) []Val {
+    const stack_start = if (self.frames.getLastOrNull()) |sf| sf.stack_start else return &.{};
+    return self.items[stack_start..self.items.len];
 }

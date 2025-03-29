@@ -31,40 +31,33 @@ pub const Instruction = union(InstructionTag) {
 
     /// Execute an instruction on `vm`.
     pub fn execute(self: Instruction, vm: *Vm) !?Val {
-        const ret = blk: {
-            switch (self) {
-                .push => |val| {
-                    try executePush(vm, val);
-                    break :blk null;
-                },
-                .eval => |n| {
-                    try executeEval(vm, n);
-                    break :blk null;
-                },
-                .get_local => |idx| {
-                    try executeGetLocal(vm, idx);
-                    break :blk null;
-                },
-                .deref => |symbol| {
-                    try executeDeref(vm, symbol);
-                    break :blk null;
-                },
-                .jump_if => |n| {
-                    executeJumpIf(vm, n);
-                    break :blk null;
-                },
-                .jump => |n| {
-                    executeJump(vm, n);
-                    break :blk null;
-                },
-                .ret => break :blk try executeRet(vm),
-            }
-        };
-        return ret;
-    }
-
-    fn executePush(vm: *Vm, val: Val) !void {
-        try vm.stack.push(val);
+        switch (self) {
+            .push => |val| {
+                try vm.stack.push(val);
+                return null;
+            },
+            .eval => |n| {
+                try executeEval(vm, n);
+                return null;
+            },
+            .get_local => |idx| {
+                try executeGetLocal(vm, idx);
+                return null;
+            },
+            .deref => |symbol| {
+                try executeDeref(vm, symbol);
+                return null;
+            },
+            .jump_if => |n| {
+                executeJumpIf(vm, n);
+                return null;
+            },
+            .jump => |n| {
+                executeJump(vm, n);
+                return null;
+            },
+            .ret => return try executeRet(vm),
+        }
     }
 
     fn executeEval(vm: *Vm, n: u32) !void {
@@ -92,7 +85,7 @@ pub const Instruction = union(InstructionTag) {
 
     fn executeGetLocal(vm: *Vm, idx: u32) !void {
         const val = vm.stack.local()[idx];
-        try executePush(vm, val);
+        try vm.stack.push(val);
     }
 
     fn executeDeref(vm: *Vm, symbol: Symbol.Interned) !void {
@@ -106,7 +99,7 @@ pub const Instruction = union(InstructionTag) {
             }
             return error.SymbolNotFound;
         };
-        try executePush(vm, val);
+        try vm.stack.push(val);
     }
 
     fn executeJumpIf(vm: *Vm, n: u32) void {

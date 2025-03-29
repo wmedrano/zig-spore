@@ -1,3 +1,19 @@
+//! fn addTwo(vm: *Vm) Val.FunctionError!Val {
+//!     const args = vm.stack.local();
+//!     if (args.len != 1) return Val.FunctionError.WrongArity;
+//!     const arg = try args[0].toZig(i64, vm);
+//!     return Val.fromZig(i64, vm, 2 + arg);
+//! }
+//!
+//! test "can eval custom fuction" {
+//!     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+//!     defer vm.deinit();
+//!     try vm.global.registerFunction(&vm, "add-2", addTwo);
+//!     try std.testing.expectEqual(
+//!         10,
+//!         try vm.evalStr(i64, "(add-2 8)"),
+//!     );
+//! }
 const std = @import("std");
 
 const AstBuilder = @import("AstBuilder.zig");
@@ -42,10 +58,12 @@ pub const Options = struct {
 /// Create a new `Vm` with the given options.
 pub fn init(options: Options) !Vm {
     const stack = try Stack.init(options.allocator);
+    var objects = ObjectManager{};
+    const global_name = try objects.string_interner.internToId(options.allocator, "");
     var vm = Vm{
         .options = options,
-        .global = .{},
-        .objects = .{},
+        .global = .{ .name = global_name },
+        .objects = objects,
         .stack = stack,
     };
     try builtins.registerAll(&vm);
@@ -94,16 +112,6 @@ pub fn evalStr(self: *Vm, T: type, source: []const u8) !T {
     return ret.toZig(T, self);
 }
 
-fn run(self: *Vm) !Val {
-    var return_value = Val.init();
-    while (self.nextInstruction()) |instruction| {
-        if (try instruction.execute(self)) |v| {
-            return_value = v;
-        }
-    }
-    return return_value;
-}
-
 /// Run the garbage collector.
 ///
 /// This reduces memory usage by cleaning up unused allocated `Val`s.
@@ -119,6 +127,16 @@ pub fn runGc(self: *Vm) !void {
         self.objects.markReachable(v.*);
     }
     try self.objects.sweepUnreachable(self.allocator());
+}
+
+fn run(self: *Vm) !Val {
+    var return_value = Val.init();
+    while (self.nextInstruction()) |instruction| {
+        if (try instruction.execute(self)) |v| {
+            return_value = v;
+        }
+    }
+    return return_value;
 }
 
 fn nextInstruction(self: Vm) ?Instruction {

@@ -102,13 +102,13 @@ fn macroExpand(self: *Compiler, ast: Val) !?Val {
     }
     const leading_symbol = if (expr[0].asInternedSymbol()) |x| x else return null;
     const macro_fn: ?*const function.FunctionVal = if (leading_symbol.eql(self.def_symbol))
-        function.FunctionVal.init(builtin_macros.DefMacro)
+        function.FunctionVal.init("def", builtin_macros.defMacro)
     else if (leading_symbol.eql(self.defun_symbol))
-        function.FunctionVal.init(builtin_macros.DefunMacro)
+        function.FunctionVal.init("defun", builtin_macros.defunMacro)
     else if (leading_symbol.eql(self.when_symbol))
-        function.FunctionVal.init(builtin_macros.WhenMacro)
+        function.FunctionVal.init("when", builtin_macros.whenMacro)
     else if (leading_symbol.eql(self.minus_symbol))
-        function.FunctionVal.init(builtin_macros.SubtractMacro)
+        function.FunctionVal.init("-", builtin_macros.subtractMacro)
     else
         null;
     if (macro_fn) |f| {

@@ -97,26 +97,22 @@ test "can eval recursive function" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try vm.evalStr(void, "(defun fib (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))");
-    vm.options.log = true;
     try std.testing.expectEqual(
         55,
         try vm.evalStr(i64, "(fib 10)"),
     );
 }
 
-const Add2Fn = struct {
-    pub const name = "add-2";
-    pub fn fnImpl(vm: *Vm) function.Error!Val {
-        const args = vm.stack.local();
-        if (args.len != 1) return function.Error.WrongArity;
-        const arg = try args[0].toZig(i64, vm);
-        return Val.fromZig(i64, vm, 2 + arg);
-    }
-};
+fn addTwoFn(vm: *Vm) function.Error!Val {
+    const args = vm.stack.local();
+    if (args.len != 1) return function.Error.WrongArity;
+    const arg = try args[0].toZig(i64, vm);
+    return Val.fromZig(i64, vm, 2 + arg);
+}
 
 test "can eval custom fuction" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    try vm.global.registerFunction(&vm, Add2Fn);
+    try vm.global.registerFunction(&vm, "add-2", addTwoFn);
     defer vm.deinit();
     try std.testing.expectEqual(
         10,

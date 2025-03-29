@@ -25,7 +25,7 @@ pub fn fromStr(str: []const u8) !Symbol {
 }
 
 pub fn intern(self: Symbol, vm: *Vm) !Interned {
-    const id = try vm.objects.string_interner.intern(
+    const id = try vm.objects.string_interner.internToId(
         vm.allocator(),
         self.name,
     );
@@ -53,7 +53,7 @@ pub const InternedKey = packed struct {
     id: StringInterner.Id,
 
     pub fn fromKey(vm: *Vm, key: Key) !InternedKey {
-        const id = try vm.objects.string_interner.intern(
+        const id = try vm.objects.string_interner.internToId(
             vm.allocator(),
             key.name,
         );

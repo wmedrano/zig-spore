@@ -27,7 +27,7 @@ pub fn deinit(self: *StringInterner, allocator: std.mem.Allocator) void {
     self.string_to_id.deinit(allocator);
 }
 
-pub fn intern(self: *StringInterner, allocator: std.mem.Allocator, str: []const u8) !Id {
+pub fn internToId(self: *StringInterner, allocator: std.mem.Allocator, str: []const u8) !Id {
     if (self.string_to_id.get(str)) |id| {
         return .{ .id = id };
     }

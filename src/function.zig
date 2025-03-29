@@ -75,33 +75,35 @@ pub const ByteCodeFunction = struct {
     }
 };
 
+/// Contains a Zig function that can be evaluated within a `Vm`.
+///
+/// Note: All members should live for the lifetime of the `Vm`.
 pub const FunctionVal = struct {
+    /// The name of the function.
     name: []const u8,
+    /// The function implementation that takes the `Vm` and returns a `Val`.
     function: *const fn (*Vm) Error!Val,
 
-    /// Create a new function from a `type` specification.
+    /// Create a new function from a Zig function.
     ///
     /// Example:
     /// ```zig
-    /// const Add2Fn = struct {
-    ///     pub const name = "add-2";
-    ///     pub fn fnImpl(vm: *Vm) Val.FunctionError!Val {
-    ///         const args = vm.stack.local();
-    ///         if (args.len != 1) return Val.FunctionError.WrongArity;
-    ///         const arg = try args[0].toZig(i64, vm);
-    ///         return Val.fromZig(i64, vm, 2 + arg);
-    ///     }
-    /// };
-    /// const my_func = FunctionVal.init(Add2Fn);
+    ///   pub fn addTwo(vm: *Vm) Val.FunctionError!Val {
+    ///       const args = vm.stack.local();
+    ///       if (args.len != 1) return Val.FunctionError.WrongArity;
+    ///       const arg = try args[0].toZig(i64, vm);
+    ///       return Val.fromZig(i64, vm, 2 + arg);
+    ///   }
+    /// const my_func = FunctionVal.init("add-2", addTwo);
     /// ```
-    pub fn init(comptime func: type) *const FunctionVal {
+    pub fn init(comptime func_name: []const u8, comptime func: anytype) *const FunctionVal {
         const wrapped_function = struct {
-            const FUNCTION = function.FunctionVal{
-                .name = func.name,
-                .function = func.fnImpl,
+            const function = FunctionVal{
+                .name = func_name,
+                .function = func,
             };
         };
-        return &wrapped_function.FUNCTION;
+        return &wrapped_function.function;
     }
 
     /// Execute `self` on`vm` with `args`.
