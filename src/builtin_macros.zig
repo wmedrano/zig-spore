@@ -71,27 +71,3 @@ pub fn whenMacro(vm: *Vm) function.Error!Val {
         try Val.fromZig([]const Val, vm, body_expr),
     });
 }
-
-pub fn subtractMacro(vm: *Vm) function.Error!Val {
-    const args = vm.stack.local();
-    if (args.len == 0) {
-        return function.Error.WrongArity;
-    }
-    const negate_symbol = try (Symbol{ .quotes = 0, .name = "negate" }).intern(vm);
-    if (args.len == 1) {
-        return Val.fromZig([]const Val, vm, &.{
-            negate_symbol.toVal(),
-            args[0],
-        });
-    }
-    const plus_symbol = try (Symbol{ .quotes = 0, .name = "+" }).intern(vm);
-    var negative_builder = try vm.allocator().dupe(Val, args);
-    defer vm.allocator().free(negative_builder);
-    negative_builder[0] = negate_symbol.toVal();
-    const negative_part = try Val.fromZig([]const Val, vm, negative_builder);
-    return Val.fromZig(
-        []const Val,
-        vm,
-        &.{ plus_symbol.toVal(), args[0], negative_part },
-    );
-}

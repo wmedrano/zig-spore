@@ -1,12 +1,12 @@
 const std = @import("std");
+
 const Instruction = @import("instruction.zig").Instruction;
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const config = @import("config.zig");
 const function = @import("function.zig");
 
 const Stack = @This();
-
-const max_stack_len = 4096;
 
 /// All items contained on the stack across all frames.
 items: []Val,
@@ -28,7 +28,7 @@ pub const Frame = struct {
 
 /// Initialize a new `Stack`.
 pub fn init(allocator: std.mem.Allocator) !Stack {
-    var items = try allocator.alloc(Val, max_stack_len);
+    var items = try allocator.alloc(Val, config.max_stack_len);
     items.len = 0;
     const frames = try std.ArrayListUnmanaged(Stack.Frame).initCapacity(allocator, 256);
     return .{
@@ -38,7 +38,7 @@ pub fn init(allocator: std.mem.Allocator) !Stack {
 }
 
 pub fn deinit(self: *Stack, allocator: std.mem.Allocator) void {
-    allocator.free(self.items.ptr[0..max_stack_len]);
+    allocator.free(self.items.ptr[0..config.max_stack_len]);
     self.frames.deinit(allocator);
 }
 
@@ -62,7 +62,7 @@ pub fn push(self: *Stack, val: Val) !void {
 }
 
 pub fn pushMany(self: *Stack, vals: []const Val) !void {
-    if (self.items.len + vals.len > max_stack_len) return function.Error.StackOverflow;
+    if (self.items.len + vals.len > config.max_stack_len) return function.Error.StackOverflow;
     const start = self.items.len;
     const end = start + vals.len;
     self.items.len = end;

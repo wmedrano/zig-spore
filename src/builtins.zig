@@ -10,6 +10,7 @@ pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, "%define", defineFn);
     try vm.global.registerFunction(vm, "do", doFn);
     try vm.global.registerFunction(vm, "+", plusFn);
+    try vm.global.registerFunction(vm, "-", minusFn);
     try vm.global.registerFunction(vm, "negate", negateFn);
     try vm.global.registerFunction(vm, "<", lessFn);
     try vm.global.registerFunction(vm, "str-len", strLenFn);
@@ -29,11 +30,11 @@ fn defineFn(vm: *Vm) function.Error!Val {
     return Val.init();
 }
 
-fn plusFn(vm: *Vm) function.Error!Val {
+fn plusImpl(vm: *Vm, vals: []const Val) function.Error!Val {
     var int_sum: i64 = 0;
     var float_sum: f64 = 0.0;
     var has_float = false;
-    for (vm.stack.local()) |v| {
+    for (vals) |v| {
         if (v.isInt()) {
             int_sum += try v.toZig(i64, vm);
         } else {
@@ -48,14 +49,34 @@ fn plusFn(vm: *Vm) function.Error!Val {
     return Val.fromZig(i64, vm, int_sum);
 }
 
-fn negateFn(vm: *Vm) function.Error!Val {
+fn plusFn(vm: *Vm) function.Error!Val {
+    return plusImpl(vm, vm.stack.local());
+}
+
+fn minusFn(vm: *Vm) function.Error!Val {
     const args = vm.stack.local();
-    if (args.len != 1) return function.Error.WrongArity;
-    switch (args[0].repr) {
+    if (args.len == 0) return function.Error.WrongArity;
+    if (args.len == 1) return negateImpl(vm, args[0]);
+    const leading = args[0];
+    const rest = try negateImpl(
+        vm,
+        try plusImpl(vm, args[1..]),
+    );
+    return plusImpl(vm, &.{ leading, rest });
+}
+
+fn negateImpl(vm: *Vm, val: Val) function.Error!Val {
+    switch (val.repr) {
         .int => |x| return Val.fromZig(i64, vm, -x),
         .float => |x| return Val.fromZig(f64, vm, -x),
         else => return function.Error.WrongType,
     }
+}
+
+fn negateFn(vm: *Vm) function.Error!Val {
+    const args = vm.stack.local();
+    if (args.len != 1) return function.Error.WrongArity;
+    return negateImpl(vm, args[0]);
 }
 
 fn lessFn(vm: *Vm) function.Error!Val {
