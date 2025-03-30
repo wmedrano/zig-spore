@@ -21,34 +21,34 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
 /// Register a Zig function into the module.
 ///
 /// - `vm` - The virtual machine for the module.
-/// - `name` - The name to register the function under. Must be unique
-///        to the module or an error is returned.
-/// - `func` - A function that takes `vm` and returns `Val.FunctionError!Val`.
+/// - `func` - The `function.FunctionVal` to register.
 ///
 /// ```zig
-/// fn addTwo(vm: *Vm) Val.FunctionError!Val {
-///     const args = vm.stack.local();
-///     if (args.len != 1) return Val.FunctionError.WrongArity;
-///     const arg = try args[0].toZig(i64, vm);
-///     return Val.fromZig(vm, 2 + arg);
+/// fn addTwo(vm: *Vm, args: struct{ number: i64 }) Val.FunctionError!Val {
+///     return Val.fromZig(vm, 2 + args.number);
 /// }
 ///
 /// test "can eval custom fuction" {
 ///     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-///     try vm.global.registerFunction(&vm, "add-2", addTwo);
 ///     defer vm.deinit();
+///     try vm.global.registerFunction(&vm, function.FunctionVal.withArgParser("add-2", addTwo));
 ///     try std.testing.expectEqual(
 ///         10,
 ///         try vm.evalStr(i64, "(add-2 8)"),
 ///     );
 /// }
 /// ```
-pub fn registerFunction(self: *Module, vm: *Vm, comptime name: []const u8, comptime func: anytype) !void {
-    const resolved_func = function.FunctionVal.init(name, func);
+pub fn registerFunction(self: *Module, vm: *Vm, func: *const function.FunctionVal) !void {
+    if (func.name.len == 0 or func.name[0] == '\'') return function.Error.ExpectedIdentifier;
+    const interned_name = try vm.objects.string_interner.intern(vm.allocator(), func.name);
     const val = Val{
-        .repr = .{ .function = resolved_func },
+        .repr = .{ .function = func },
     };
-    try self.registerValueByName(vm, name, val);
+    try self.registerValue(
+        vm,
+        .{ .quotes = 0, .id = interned_name.id },
+        val,
+    );
 }
 
 /// Register a value into the module. `name` must not already be
@@ -64,6 +64,7 @@ pub fn registerValueByName(self: *Module, vm: *Vm, name: []const u8, value: Val)
 /// or `error.ValueAlreadyDefined` is returned.
 pub fn registerValue(self: *Module, vm: *Vm, symbol: Symbol.Interned, value: Val) !void {
     if (self.values.contains(symbol)) return function.Error.ValueAlreadyDefined;
+    if (symbol.quotes > 0) return function.Error.TooManyQuotes;
     try self.values.put(vm.allocator(), symbol, value);
 }
 

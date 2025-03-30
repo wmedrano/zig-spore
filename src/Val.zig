@@ -50,6 +50,7 @@ pub fn init() Val {
 /// - `bool` - Converts to a `Val.bool`.
 /// - `i64` - Converts to a `Val.int`.
 /// - `f64` - Converts to a `Val.float`.
+/// - `Val.Number` - Converts to a value that holds an int or float.
 /// - `[]const u8` or `[]u8` - Creates a new `Val.string` by copying the slice
 ///     contents.
 /// - `Symbol` - Converts to a `Val.symbol`.
@@ -74,6 +75,10 @@ pub fn fromZig(vm: *Vm, val: anytype) !Val {
         bool => return .{ .repr = .{ .bool = val } },
         i64 => return .{ .repr = .{ .int = val } },
         f64 => return .{ .repr = .{ .float = val } },
+        Number => switch (val) {
+            .int => |x| .{ .repr = .{ .int = x } },
+            .float => |x| .{ .repr = .{ .float = x } },
+        },
         []const u8, []u8 => {
             const owned_string = try vm.allocator().dupe(u8, val);
             const id = try vm.objects.put(String, vm.allocator(), .{ .string = owned_string });
@@ -109,6 +114,7 @@ pub const ToZigError = error{
 /// - `bool`
 /// - `i64`
 /// - `f64`
+/// - `Number`
 /// - `[]const u8` (returns a slice pointing to the Val's internal string)
 /// - `Symbol` or `Symbol.Interned`
 /// - `Symbol.Key` or `InternedKey`
@@ -134,10 +140,12 @@ pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
         },
         .int => |v| {
             if (T == i64) return v;
+            if (T == Number) return .{ .int = v };
             return ToZigError.WrongType;
         },
         .float => |v| {
             if (T == f64) return v;
+            if (T == Number) return .{ .float = v };
             return ToZigError.WrongType;
         },
         .string => {
@@ -376,6 +384,11 @@ pub const List = struct {
             obj.markReachable(v);
         }
     }
+};
+
+pub const Number = union(enum) {
+    int: i64,
+    float: f64,
 };
 
 test "null to Zig returns void" {

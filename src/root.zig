@@ -112,7 +112,7 @@ fn addTwoFn(vm: *Vm) function.Error!Val {
 
 test "can eval custom fuction" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    try vm.global.registerFunction(&vm, "add-2", addTwoFn);
+    try vm.global.registerFunction(&vm, function.FunctionVal.init("add-2", addTwoFn));
     defer vm.deinit();
     try std.testing.expectEqual(
         10,

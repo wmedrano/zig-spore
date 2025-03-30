@@ -8,26 +8,24 @@ const converters = @import("converters.zig");
 const function = @import("function.zig");
 
 pub fn registerAll(vm: *Vm) !void {
-    try vm.global.registerFunction(vm, "%define", defineFn);
-    try vm.global.registerFunction(vm, "do", doFn);
-    try vm.global.registerFunction(vm, "+", plusFn);
-    try vm.global.registerFunction(vm, "-", minusFn);
-    try vm.global.registerFunction(vm, "negate", negateFn);
-    try vm.global.registerFunction(vm, "<", lessFn);
-    try vm.global.registerFunction(vm, "str-len", strLenFn);
-    try vm.global.registerFunction(vm, "str->sexps", strToSexpsFn);
-    try vm.global.registerFunction(vm, "str->sexp", strToSexpFn);
-    try vm.global.registerFunction(vm, "function-bytecode", functionBytecodeFn);
+    try vm.global.registerFunction(vm, function.FunctionVal.withArgParser("%define", defineFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.withArgParser("do", doFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.init("+", plusFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.init("-", minusFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.withArgParser("negate", negateFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.init("<", lessFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.withArgParser("str-len", strLenFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.init("str->sexps", strToSexpsFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.init("str->sexp", strToSexpFn));
+    try vm.global.registerFunction(vm, function.FunctionVal.withArgParser("function-bytecode", functionBytecodeFn));
 }
 
-fn defineFn(vm: *Vm) function.Error!Val {
-    const args = vm.stack.local();
-    if (args.len != 2) {
-        return function.Error.WrongArity;
-    }
-    const symbol = if (args[0].asInternedSymbol()) |s| s else return function.Error.WrongType;
-    const value = args[1];
-    try vm.global.registerValue(vm, symbol, value);
+fn defineFn(vm: *Vm, args: struct { symbol: Symbol.Interned, value: Val }) function.Error!Val {
+    try vm.global.registerValue(
+        vm,
+        args.symbol,
+        args.value,
+    );
     return Val.init();
 }
 
@@ -35,14 +33,14 @@ fn plusImpl(vm: *Vm, vals: []const Val) function.Error!Val {
     var int_sum: i64 = 0;
     var float_sum: f64 = 0.0;
     var has_float = false;
-    for (vals) |v| {
-        if (v.isInt()) {
-            int_sum += try v.toZig(i64, vm);
-        } else {
+    var numbersIter = converters.iter(Val.Number, vm, vals);
+    while (try numbersIter.next()) |v| switch (v) {
+        .int => |x| int_sum += x,
+        .float => |x| {
             has_float = true;
-            float_sum += try v.toZig(f64, vm);
-        }
-    }
+            float_sum += x;
+        },
+    };
     if (has_float) {
         const int_sum_as_float: f64 = @floatFromInt(int_sum);
         return Val.fromZig(vm, float_sum + int_sum_as_float);
@@ -67,17 +65,15 @@ fn minusFn(vm: *Vm) function.Error!Val {
 }
 
 fn negateImpl(vm: *Vm, val: Val) function.Error!Val {
-    switch (val.repr) {
+    const number = try val.toZig(Val.Number, vm);
+    switch (number) {
         .int => |x| return Val.fromZig(vm, -x),
         .float => |x| return Val.fromZig(vm, -x),
-        else => return function.Error.WrongType,
     }
 }
 
-fn negateFn(vm: *Vm) function.Error!Val {
-    const args = vm.stack.local();
-    if (args.len != 1) return function.Error.WrongArity;
-    return negateImpl(vm, args[0]);
+fn negateFn(vm: *Vm, args: struct { v: Val }) function.Error!Val {
+    return negateImpl(vm, args.v);
 }
 
 fn lessFn(vm: *Vm) function.Error!Val {
@@ -86,55 +82,49 @@ fn lessFn(vm: *Vm) function.Error!Val {
     if (arg_count == 0) return Val.fromZig(vm, true);
     if (arg_count == 1) if (args[0].isNumber()) return Val.fromZig(vm, true) else return function.Error.WrongType;
     var res = true;
-    for (args[0 .. arg_count - 1], args[1..]) |val_a, val_b| {
-        switch (val_a.repr) {
-            .int => |a| switch (val_b.repr) {
+    var lhs = converters.iter(Val.Number, vm, args[0 .. arg_count - 1]);
+    var rhs = converters.iter(Val.Number, vm, args[1..]);
+    while (try lhs.next()) |val_a| {
+        const val_b = (try rhs.next()).?;
+        switch (val_a) {
+            .int => |a| switch (val_b) {
                 .int => |b| res = res and (a < b),
                 .float => |b| {
                     const a_float: f64 = @floatFromInt(a);
                     res = res and (a_float < b);
                 },
-                else => return function.Error.WrongType,
             },
             .float => |a| {
-                switch (val_b.repr) {
+                switch (val_b) {
                     .int => |b| {
                         const b_float: f64 = @floatFromInt(b);
                         res = res and (a < b_float);
                     },
                     .float => |b| res = res and (a < b),
-                    else => return function.Error.WrongType,
                 }
             },
-            else => return function.Error.WrongType,
         }
     }
     return Val.fromZig(vm, res);
 }
 
-pub fn doFn(vm: *Vm) function.Error!Val {
-    const args = vm.stack.local();
-    if (args.len == 0) return Val.init();
-    return args[args.len - 1];
+pub fn doFn(_: *Vm, args: struct { rest: []const Val }) function.Error!Val {
+    if (args.rest.len == 0) return Val.init();
+    return args.rest[args.rest.len - 1];
 }
 
-fn strLenFn(vm: *Vm) function.Error!Val {
-    const args = vm.stack.local();
-    if (args.len != 1) {
-        return function.Error.WrongArity;
-    }
-    const str = try args[0].toZig([]const u8, vm);
-    const len: i64 = @intCast(str.len);
+fn strLenFn(vm: *Vm, args: struct { str: []const u8 }) function.Error!Val {
+    const len: i64 = @intCast(args.str.len);
     return Val.fromZig(vm, len);
 }
 
 fn strToSexpsFn(vm: *Vm) function.Error!Val {
-    const args = vm.stack.local();
-    if (args.len != 1) {
-        return function.Error.WrongArity;
-    }
-    const str = try args[0].toZig([]const u8, vm);
-    var ast_builder = @import("AstBuilder.zig").init(vm, str);
+    const args = try converters.parseAsArgs(
+        struct { str: []const u8 },
+        vm,
+        vm.stack.local(),
+    );
+    var ast_builder = @import("AstBuilder.zig").init(vm, args.str);
     while (try ast_builder.next()) |ast| {
         try vm.stack.push(ast.expr);
     }
@@ -152,10 +142,8 @@ fn strToSexpFn(vm: *Vm) function.Error!Val {
     }
 }
 
-fn functionBytecodeFn(vm: *Vm) function.Error!Val {
-    const args = vm.stack.local();
-    if (args.len != 1) return function.Error.WrongArity;
-    const func = switch (args[0].repr) {
+fn functionBytecodeFn(vm: *Vm, args: struct { func: Val }) function.Error!Val {
+    const func = switch (args.func.repr) {
         .bytecode_function => |id| vm.objects.get(ByteCodeFunction, id).?,
         else => return function.Error.WrongType,
     };

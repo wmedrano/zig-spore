@@ -1,20 +1,14 @@
 //! The Spore virtual machine used to execute Spore code.
 //!
-//! ```zig
-//! fn addTwo(vm: *Vm) Val.FunctionError!Val {
-//!     const args = vm.stack.local();
-//!     if (args.len != 1) return Val.FunctionError.WrongArity;
-//!     const arg = try args[0].toZig(i64, vm);
-//!     return Val.fromZig(vm, 2 + arg);
-//! }
+//! `Vm.evalStr` can be used to evaluate code. To register values, see
+//! methods like `Module.registerValue` and `Module.registerFunction`.
 //!
-//! test "can eval custom fuction" {
+//! test "can evaluate code" {
 //!     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
 //!     defer vm.deinit();
-//!     try vm.global.registerFunction(&vm, "add-2", addTwo);
 //!     try std.testing.expectEqual(
-//!         10,
-//!         try vm.evalStr(i64, "(add-2 8)"),
+//!         42,
+//!         try vm.evalStr(i64, "(+ 20 20 2)"),
 //!     );
 //! }
 //! ```

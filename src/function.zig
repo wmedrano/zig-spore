@@ -5,6 +5,7 @@ const ObjectManager = @import("ObjectManager.zig");
 const Stack = @import("Stack.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const converters = @import("converters.zig");
 const function = @import("function.zig");
 
 pub const Error = error{
@@ -96,7 +97,17 @@ pub const FunctionVal = struct {
     ///   }
     /// const my_func = FunctionVal.init("add-2", addTwo);
     /// ```
-    pub fn init(comptime func_name: []const u8, comptime func: anytype) *const FunctionVal {
+    pub fn init(comptime func_name: []const u8, comptime func: *const fn (*Vm) Error!Val) *const FunctionVal {
+        const wrapped_function = struct {
+            const function = FunctionVal{
+                .name = func_name,
+                .function = func,
+            };
+        };
+        return &wrapped_function.function;
+    }
+
+    pub fn withArgParser(comptime func_name: []const u8, func: anytype) *const FunctionVal {
         const wrapped_function = struct {
             const function = FunctionVal{
                 .name = func_name,
@@ -104,7 +115,24 @@ pub const FunctionVal = struct {
             };
 
             fn fnImpl(vm: *Vm) Error!Val {
-                return func(vm);
+                const func_type = @typeInfo(@TypeOf(func));
+                const arg_type = switch (func_type) {
+                    .Fn => |f| blk: {
+                        if (f.params.len != 2 or f.params[0].type != *Vm) {
+                            @compileError(
+                                "withArgParser requires passing a `fn(*Vm, T) Error!Val` but passed a " ++
+                                    @typeName(func_type),
+                            );
+                        }
+                        break :blk f.params[1].type.?;
+                    },
+                    else => @compileError(
+                        "withArgParser requires passing a `fn(*Vm, T) Error!Val` but passed " ++
+                            @typeName(func_type) ++ ".",
+                    ),
+                };
+                const args = try converters.parseAsArgs(arg_type, vm, vm.stack.local());
+                return func(vm, args);
             }
         };
         return &wrapped_function.function;
