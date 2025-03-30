@@ -5,24 +5,23 @@ const Instruction = @import("instruction.zig").Instruction;
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const converters = @import("converters.zig");
 const function = @import("function.zig");
 
 pub fn defMacro(vm: *Vm) function.Error!Val {
-    const internal_define_symbol = try (Symbol{ .quotes = 0, .name = "%define" }).intern(vm);
     const expr = vm.stack.local();
     if (expr.len != 2) {
         return function.Error.BadDefine;
     }
     const symbol = if (expr[0].asInternedSymbol()) |x| x.quoted() else return function.Error.ExpectedIdentifier;
     return try Val.fromZig(vm, @as([]const Val, &[_]Val{
-        internal_define_symbol.toVal(),
+        try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "%define" }),
         symbol.toVal(),
         expr[1],
     }));
 }
 
 pub fn defunMacro(vm: *Vm) function.Error!Val {
-    const internal_define_symbol = try (Symbol{ .quotes = 0, .name = "%define" }).intern(vm);
     const function_symbol = try (Symbol{ .quotes = 0, .name = "function" }).intern(vm);
     const expr = vm.stack.local();
     if (expr.len < 3) {
@@ -46,7 +45,7 @@ pub fn defunMacro(vm: *Vm) function.Error!Val {
     return try Val.fromZig(
         vm,
         @as([]const Val, &[_]Val{
-            internal_define_symbol.toVal(),
+            try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "%define" }),
             function_name.quoted().toVal(),
             function_expr_val,
         }),

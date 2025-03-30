@@ -55,10 +55,21 @@ pub fn init() Val {
 /// - `Symbol` - Converts to a `Val.symbol`.
 /// - `Symbol.Interned` - Converts to a `Val.symbol`.
 /// - `[]const Val` or `[]Val` - Converts to a `Val.list`.
+/// - `?T` where T is supported - Converts to `T` or `void` if `T` is null.
 pub fn fromZig(vm: *Vm, val: anytype) !Val {
     const T = @TypeOf(val);
-    if (T == Val) return val;
+    const type_info = @typeInfo(T);
+    switch (type_info) {
+        .Optional => {
+            if (val) |v| {
+                return fromZig(vm, v);
+            }
+            return init();
+        },
+        else => {},
+    }
     switch (T) {
+        Val => return val,
         void => return init(),
         bool => return .{ .repr = .{ .bool = val } },
         i64 => return .{ .repr = .{ .int = val } },
@@ -102,6 +113,7 @@ pub const ToZigError = error{
 /// - `Symbol` or `Symbol.Interned`
 /// - `Symbol.Key` or `InternedKey`
 /// - `[]const Val` (returns a slice pointing to the Val's internal list)
+/// - `?T` where T is a supported type.
 ///
 /// Note: For slice types (`[]const u8`, `[]const Val`), the returned slice's
 /// lifetime is tied to the underlying object in the Vm's ObjectManager.
@@ -111,6 +123,9 @@ pub fn toZig(self: Val, comptime T: type, vm: *const Vm) ToZigError!T {
     switch (self.repr) {
         .void => {
             if (T == void) return;
+            if (@as(std.builtin.TypeId, @typeInfo(T)) == std.builtin.TypeId.Optional) {
+                return null;
+            }
             return ToZigError.WrongType;
         },
         .bool => |v| {
@@ -186,6 +201,14 @@ pub fn isTruthy(self: Val) bool {
     };
 }
 
+pub fn fromFloat(x: f64) Val {
+    return .{ .repr = .{ .float = x } };
+}
+
+pub fn fromInt(x: i64) Val {
+    return .{ .repr = .{ .int = x } };
+}
+
 pub fn fromOwnedList(vm: *Vm, owned_list: []Val) !Val {
     const id = try vm.objects.put(List, vm.allocator(), .{ .list = owned_list });
     return .{ .repr = .{ .list = id } };
@@ -215,6 +238,13 @@ pub fn isNumber(self: Val) bool {
     switch (self.repr) {
         .int => return true,
         .float => return true,
+        else => return false,
+    }
+}
+
+pub fn isVoid(self: Val) bool {
+    switch (self.repr) {
+        .void => return true,
         else => return false,
     }
 }
@@ -347,6 +377,23 @@ pub const List = struct {
         }
     }
 };
+
+test "null to Zig returns void" {
+    var vm = try Vm.init(.{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    const null_value: ?i64 = null;
+    const not_null_value: ?i64 = 10;
+
+    try std.testing.expectEqual(
+        Val.init(),
+        try Val.fromZig(&vm, null_value),
+    );
+    try std.testing.expectEqual(
+        Val.fromInt(10),
+        try Val.fromZig(&vm, not_null_value),
+    );
+}
 
 test "val is small" {
     try std.testing.expectEqual(2 * @sizeOf(u64), @sizeOf(Val));

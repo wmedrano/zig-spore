@@ -100,8 +100,12 @@ pub const FunctionVal = struct {
         const wrapped_function = struct {
             const function = FunctionVal{
                 .name = func_name,
-                .function = func,
+                .function = fnImpl,
             };
+
+            fn fnImpl(vm: *Vm) Error!Val {
+                return func(vm);
+            }
         };
         return &wrapped_function.function;
     }

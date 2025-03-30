@@ -1,3 +1,6 @@
+//! The Spore virtual machine used to execute Spore code.
+//!
+//! ```zig
 //! fn addTwo(vm: *Vm) Val.FunctionError!Val {
 //!     const args = vm.stack.local();
 //!     if (args.len != 1) return Val.FunctionError.WrongArity;
@@ -14,6 +17,7 @@
 //!         try vm.evalStr(i64, "(add-2 8)"),
 //!     );
 //! }
+//! ```
 const std = @import("std");
 
 const AstBuilder = @import("AstBuilder.zig");
@@ -128,22 +132,6 @@ pub fn runGc(self: *Vm) !void {
         self.objects.markReachable(v.*);
     }
     try self.objects.sweepUnreachable(self.allocator());
-}
-
-pub fn initSymbolTable(self: *Vm, T: type) !T {
-    const type_info = @typeInfo(T);
-    const struct_info = switch (type_info) {
-        .Struct => |s| s,
-        else => @compileError("initSymbolTable type T must be struct but found type " ++ @typeName(T)),
-    };
-    const ret: T = undefined;
-    inline for (struct_info.fields) |field| {
-        @field(ret, field.name) = try Val.fromZig(
-            self,
-            .{ .quotes = 0, .name = field.name },
-        );
-    }
-    return ret;
 }
 
 fn run(self: *Vm) !Val {

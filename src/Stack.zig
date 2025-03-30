@@ -30,7 +30,10 @@ pub const Frame = struct {
 pub fn init(allocator: std.mem.Allocator) !Stack {
     var items = try allocator.alloc(Val, config.max_stack_len);
     items.len = 0;
-    const frames = try std.ArrayListUnmanaged(Stack.Frame).initCapacity(allocator, 256);
+    const frames = try std.ArrayListUnmanaged(Stack.Frame).initCapacity(
+        allocator,
+        config.max_stack_frames,
+    );
     return .{
         .items = items,
         .frames = frames,

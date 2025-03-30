@@ -6,6 +6,7 @@ const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 const builtin_macros = @import("builtin_macros.zig");
+const converters = @import("converters.zig");
 const function = @import("function.zig");
 
 const Compiler = @This();
@@ -15,13 +16,19 @@ instructions: std.ArrayListUnmanaged(Instruction),
 // The symbol that is in thep process of being defined.
 define_context: []const u8,
 locals: std.ArrayListUnmanaged([]const u8),
-internal_define_symbol: Symbol.Interned,
-def_symbol: Symbol.Interned,
-defun_symbol: Symbol.Interned,
-function_symbol: Symbol.Interned,
-do_symbol: Symbol.Interned,
-if_symbol: Symbol.Interned,
-when_symbol: Symbol.Interned,
+symbols: struct {
+    @"%define": Symbol.Interned,
+    def: Symbol.Interned,
+    defun: Symbol.Interned,
+    function: Symbol.Interned,
+    do: Symbol.Interned,
+    @"if": Symbol.Interned,
+    when: Symbol.Interned,
+},
+
+fn fieldType(comptime T: type, comptime field_name: []const u8) type {
+    return @TypeOf(@field(@as(T, undefined), field_name));
+}
 
 /// Initialize a new compiler for a `Vm`.
 pub fn init(vm: *Vm) !Compiler {
@@ -30,13 +37,7 @@ pub fn init(vm: *Vm) !Compiler {
         .instructions = .{},
         .define_context = "",
         .locals = .{},
-        .internal_define_symbol = try (Symbol{ .quotes = 0, .name = "%define" }).intern(vm),
-        .def_symbol = try (Symbol{ .quotes = 0, .name = "def" }).intern(vm),
-        .defun_symbol = try (Symbol{ .quotes = 0, .name = "defun" }).intern(vm),
-        .function_symbol = try (Symbol{ .quotes = 0, .name = "function" }).intern(vm),
-        .do_symbol = try (Symbol{ .quotes = 0, .name = "do" }).intern(vm),
-        .if_symbol = try (Symbol{ .quotes = 0, .name = "if" }).intern(vm),
-        .when_symbol = try (Symbol{ .quotes = 0, .name = "when" }).intern(vm),
+        .symbols = try converters.symbolTable(vm, fieldType(Compiler, "symbols")),
     };
 }
 
@@ -46,7 +47,8 @@ pub fn deinit(self: *Compiler) void {
 }
 
 pub fn compile(self: *Compiler, expr: Val) ![]Instruction {
-    try self.compileMultiExprs(&.{expr});
+    const macro_expanded_expr = if (try self.macroExpand(expr)) |v| v else expr;
+    try self.resetAndCompile(&.{macro_expanded_expr});
     return self.instructions.toOwnedSlice(self.allocator());
 }
 
@@ -78,7 +80,7 @@ fn resolveIdentifier(self: *Compiler, name: []const u8) !ResolvedName {
     return .{ .global = try symbol.intern(self.vm) };
 }
 
-fn compileMultiExprs(self: *Compiler, exprs: []const Val) !void {
+fn resetAndCompile(self: *Compiler, exprs: []const Val) !void {
     self.instructions.clearRetainingCapacity();
     for (exprs) |expr| {
         try self.compileOne(expr);
@@ -99,11 +101,11 @@ fn macroExpand(self: *Compiler, ast: Val) !?Val {
         return if (try self.macroExpand(v)) |x| x else v;
     }
     const leading_symbol = if (expr[0].asInternedSymbol()) |x| x else return null;
-    const macro_fn: ?*const function.FunctionVal = if (leading_symbol.eql(self.def_symbol))
+    const macro_fn: ?*const function.FunctionVal = if (leading_symbol.eql(self.symbols.def))
         function.FunctionVal.init("def", builtin_macros.defMacro)
-    else if (leading_symbol.eql(self.defun_symbol))
+    else if (leading_symbol.eql(self.symbols.defun))
         function.FunctionVal.init("defun", builtin_macros.defunMacro)
-    else if (leading_symbol.eql(self.when_symbol))
+    else if (leading_symbol.eql(self.symbols.when))
         function.FunctionVal.init("when", builtin_macros.whenMacro)
     else
         null;
@@ -181,13 +183,13 @@ fn compileTree(self: *Compiler, nodes: []const Val) function.Error!void {
         return function.Error.UnexpectedEmptyExpression;
     }
     if (nodes[0].asInternedSymbol()) |leading_symbol| {
-        if (leading_symbol.eql(self.function_symbol)) {
+        if (leading_symbol.eql(self.symbols.function)) {
             if (nodes.len < 3) {
                 return function.Error.BadFunction;
             }
             const args = nodes[1].toZig([]const Val, self.vm) catch return function.Error.BadFunction;
             return self.compileFunction(args, nodes[2..]);
-        } else if (leading_symbol.eql(self.internal_define_symbol)) {
+        } else if (leading_symbol.eql(self.symbols.@"%define")) {
             if (nodes.len < 2) {
                 return function.Error.BadDefine;
             }
@@ -203,7 +205,7 @@ fn compileTree(self: *Compiler, nodes: []const Val) function.Error!void {
                     }
                 };
             }
-        } else if (leading_symbol.eql(self.if_symbol)) {
+        } else if (leading_symbol.eql(self.symbols.@"if")) {
             switch (nodes.len) {
                 3 => return self.compileIf(nodes[1], nodes[2], Val.init()),
                 4 => return self.compileIf(nodes[1], nodes[2], nodes[3]),
@@ -254,7 +256,7 @@ fn compileFunction(self: *Compiler, args: []const Val, exprs: []const Val) !void
         if (arg_symbol.quotes != 0) return function.Error.BadFunction;
         try function_compiler.addLocal(arg_symbol.name);
     }
-    try function_compiler.compileMultiExprs(exprs);
+    try function_compiler.resetAndCompile(exprs);
     const bytecode = function.ByteCodeFunction{
         .name = try self.allocator().dupe(u8, self.define_context),
         .instructions = try function_compiler.ownedInstructions(),

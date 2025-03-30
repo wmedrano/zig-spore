@@ -4,6 +4,7 @@ const ByteCodeFunction = @import("function.zig").ByteCodeFunction;
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const converters = @import("converters.zig");
 const function = @import("function.zig");
 
 pub fn registerAll(vm: *Vm) !void {
@@ -160,15 +161,24 @@ fn functionBytecodeFn(vm: *Vm) function.Error!Val {
     };
     var ret = try vm.allocator().alloc(Val, func.instructions.len);
     defer vm.allocator().free(ret);
+    const symbols = try converters.symbolTable(vm, struct {
+        push: Symbol.Interned,
+        eval: Symbol.Interned,
+        @"get-local": Symbol.Interned,
+        deref: Symbol.Interned,
+        @"jump-if": Symbol.Interned,
+        jump: Symbol.Interned,
+        ret: Symbol.Interned,
+    });
     for (0..func.instructions.len, func.instructions) |idx, instruction| {
         const code = switch (instruction) {
-            .push => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "push" }),
-            .eval => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "eval" }),
-            .get_local => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "get_local" }),
-            .deref => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "deref" }),
-            .jump_if => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "jump_if" }),
-            .jump => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "jump" }),
-            .ret => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "ret" }),
+            .push => try Val.fromZig(vm, symbols.push),
+            .eval => try Val.fromZig(vm, symbols.eval),
+            .get_local => try Val.fromZig(vm, symbols.@"get-local"),
+            .deref => try Val.fromZig(vm, symbols.deref),
+            .jump_if => try Val.fromZig(vm, symbols.@"jump-if"),
+            .jump => try Val.fromZig(vm, symbols.jump),
+            .ret => try Val.fromZig(vm, symbols.ret),
         };
         const data: ?Val = switch (instruction) {
             .push => |v| v,
