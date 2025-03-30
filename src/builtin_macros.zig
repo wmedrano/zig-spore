@@ -14,11 +14,11 @@ pub fn defMacro(vm: *Vm) function.Error!Val {
         return function.Error.BadDefine;
     }
     const symbol = if (expr[0].asInternedSymbol()) |x| x.quoted() else return function.Error.ExpectedIdentifier;
-    return try Val.fromZig([]const Val, vm, &.{
+    return try Val.fromZig(vm, @as([]const Val, &[_]Val{
         internal_define_symbol.toVal(),
         symbol.toVal(),
         expr[1],
-    });
+    }));
 }
 
 pub fn defunMacro(vm: *Vm) function.Error!Val {
@@ -44,13 +44,12 @@ pub fn defunMacro(vm: *Vm) function.Error!Val {
         try function_expr.toOwnedSlice(vm.allocator()),
     );
     return try Val.fromZig(
-        []const Val,
         vm,
-        &.{
+        @as([]const Val, &[_]Val{
             internal_define_symbol.toVal(),
             function_name.quoted().toVal(),
             function_expr_val,
-        },
+        }),
     );
 }
 
@@ -65,9 +64,9 @@ pub fn whenMacro(vm: *Vm) function.Error!Val {
     defer vm.allocator().free(body_expr);
     const pred = body_expr[0];
     body_expr[0] = do_symbol.toVal();
-    return try Val.fromZig([]const Val, vm, &.{
+    return try Val.fromZig(vm, @as([]const Val, &.{
         if_symbol.toVal(),
         pred,
-        try Val.fromZig([]const Val, vm, body_expr),
-    });
+        try Val.fromZig(vm, body_expr),
+    }));
 }

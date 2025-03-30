@@ -126,7 +126,7 @@ fn macroExpandSubexpressions(self: *Compiler, expr: []const Val) function.Error!
         }
     }
     if (expandedExpr) |vals| {
-        const list_val = try Val.fromZig([]const Val, self.vm, vals);
+        const list_val = try Val.fromZig(self.vm, vals);
         return list_val;
     }
     return null;
@@ -153,9 +153,8 @@ fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) function.Error!void {
             self.allocator(),
             Instruction{
                 .push = try Val.fromZig(
-                    Symbol.Interned,
                     self.vm,
-                    .{ .quotes = symbol.quotes - 1, .id = symbol.id },
+                    Symbol.Interned{ .quotes = symbol.quotes - 1, .id = symbol.id },
                 ),
             },
         );

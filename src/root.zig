@@ -107,7 +107,7 @@ fn addTwoFn(vm: *Vm) function.Error!Val {
     const args = vm.stack.local();
     if (args.len != 1) return function.Error.WrongArity;
     const arg = try args[0].toZig(i64, vm);
-    return Val.fromZig(i64, vm, 2 + arg);
+    return Val.fromZig(vm, 2 + arg);
 }
 
 test "can eval custom fuction" {

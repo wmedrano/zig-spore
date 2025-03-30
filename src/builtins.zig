@@ -44,9 +44,9 @@ fn plusImpl(vm: *Vm, vals: []const Val) function.Error!Val {
     }
     if (has_float) {
         const int_sum_as_float: f64 = @floatFromInt(int_sum);
-        return Val.fromZig(f64, vm, float_sum + int_sum_as_float);
+        return Val.fromZig(vm, float_sum + int_sum_as_float);
     }
-    return Val.fromZig(i64, vm, int_sum);
+    return Val.fromZig(vm, int_sum);
 }
 
 fn plusFn(vm: *Vm) function.Error!Val {
@@ -67,8 +67,8 @@ fn minusFn(vm: *Vm) function.Error!Val {
 
 fn negateImpl(vm: *Vm, val: Val) function.Error!Val {
     switch (val.repr) {
-        .int => |x| return Val.fromZig(i64, vm, -x),
-        .float => |x| return Val.fromZig(f64, vm, -x),
+        .int => |x| return Val.fromZig(vm, -x),
+        .float => |x| return Val.fromZig(vm, -x),
         else => return function.Error.WrongType,
     }
 }
@@ -82,8 +82,8 @@ fn negateFn(vm: *Vm) function.Error!Val {
 fn lessFn(vm: *Vm) function.Error!Val {
     const args = vm.stack.local();
     const arg_count = args.len;
-    if (arg_count == 0) return Val.fromZig(bool, vm, true);
-    if (arg_count == 1) if (args[0].isNumber()) return Val.fromZig(bool, vm, true) else return function.Error.WrongType;
+    if (arg_count == 0) return Val.fromZig(vm, true);
+    if (arg_count == 1) if (args[0].isNumber()) return Val.fromZig(vm, true) else return function.Error.WrongType;
     var res = true;
     for (args[0 .. arg_count - 1], args[1..]) |val_a, val_b| {
         switch (val_a.repr) {
@@ -108,7 +108,7 @@ fn lessFn(vm: *Vm) function.Error!Val {
             else => return function.Error.WrongType,
         }
     }
-    return Val.fromZig(bool, vm, res);
+    return Val.fromZig(vm, res);
 }
 
 pub fn doFn(vm: *Vm) function.Error!Val {
@@ -123,7 +123,8 @@ fn strLenFn(vm: *Vm) function.Error!Val {
         return function.Error.WrongArity;
     }
     const str = try args[0].toZig([]const u8, vm);
-    return Val.fromZig(i64, vm, @intCast(str.len));
+    const len: i64 = @intCast(str.len);
+    return Val.fromZig(vm, len);
 }
 
 fn strToSexpsFn(vm: *Vm) function.Error!Val {
@@ -137,7 +138,7 @@ fn strToSexpsFn(vm: *Vm) function.Error!Val {
         try vm.stack.push(ast.expr);
     }
     const exprs = vm.stack.local()[1..];
-    return Val.fromZig([]const Val, vm, exprs);
+    return Val.fromZig(vm, exprs);
 }
 
 fn strToSexpFn(vm: *Vm) function.Error!Val {
@@ -161,29 +162,29 @@ fn functionBytecodeFn(vm: *Vm) function.Error!Val {
     defer vm.allocator().free(ret);
     for (0..func.instructions.len, func.instructions) |idx, instruction| {
         const code = switch (instruction) {
-            .push => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "push" }),
-            .eval => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "eval" }),
-            .get_local => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "get_local" }),
-            .deref => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "deref" }),
-            .jump_if => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "jump_if" }),
-            .jump => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "jump" }),
-            .ret => try Val.fromZig(Symbol, vm, .{ .quotes = 0, .name = "ret" }),
+            .push => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "push" }),
+            .eval => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "eval" }),
+            .get_local => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "get_local" }),
+            .deref => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "deref" }),
+            .jump_if => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "jump_if" }),
+            .jump => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "jump" }),
+            .ret => try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "ret" }),
         };
         const data: ?Val = switch (instruction) {
             .push => |v| v,
-            .eval => |n| try Val.fromZig(i64, vm, @intCast(n)),
-            .get_local => |n| try Val.fromZig(i64, vm, @intCast(n)),
+            .eval => |n| try Val.fromZig(vm, @as(i64, @intCast(n))),
+            .get_local => |n| try Val.fromZig(vm, @as(i64, @intCast(n))),
             .deref => |sym| sym.toVal(),
-            .jump_if => |n| try Val.fromZig(i64, vm, n),
-            .jump => |n| try Val.fromZig(i64, vm, n),
+            .jump_if => |n| try Val.fromZig(vm, @as(i64, n)),
+            .jump => |n| try Val.fromZig(vm, @as(i64, n)),
             .ret => null,
         };
         ret[idx] = if (data) |d|
-            try Val.fromZig([]const Val, vm, &[_]Val{ code, d })
+            try Val.fromZig(vm, @as([]const Val, &[_]Val{ code, d }))
         else
-            try Val.fromZig([]const Val, vm, &[_]Val{code});
+            try Val.fromZig(vm, @as([]const Val, &[_]Val{code}));
     }
-    return try Val.fromZig([]const Val, vm, ret);
+    return try Val.fromZig(vm, ret);
 }
 
 test "str-len returns string length" {

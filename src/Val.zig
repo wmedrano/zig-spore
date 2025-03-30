@@ -50,19 +50,20 @@ pub fn init() Val {
 /// - `bool` - Converts to a `Val.bool`.
 /// - `i64` - Converts to a `Val.int`.
 /// - `f64` - Converts to a `Val.float`.
-/// - `[]const u8` - Creates a new `Val.string` by copying the slice
+/// - `[]const u8` or `[]u8` - Creates a new `Val.string` by copying the slice
 ///     contents.
 /// - `Symbol` - Converts to a `Val.symbol`.
 /// - `Symbol.Interned` - Converts to a `Val.symbol`.
-/// - `[]const Val` - Converts to a `Val.list`.
-pub fn fromZig(comptime T: type, vm: *Vm, val: T) !Val {
+/// - `[]const Val` or `[]Val` - Converts to a `Val.list`.
+pub fn fromZig(vm: *Vm, val: anytype) !Val {
+    const T = @TypeOf(val);
     if (T == Val) return val;
     switch (T) {
         void => return init(),
         bool => return .{ .repr = .{ .bool = val } },
         i64 => return .{ .repr = .{ .int = val } },
         f64 => return .{ .repr = .{ .float = val } },
-        []const u8 => {
+        []const u8, []u8 => {
             const owned_string = try vm.allocator().dupe(u8, val);
             const id = try vm.objects.put(String, vm.allocator(), .{ .string = owned_string });
             return .{ .repr = .{ .string = id } };
@@ -77,7 +78,7 @@ pub fn fromZig(comptime T: type, vm: *Vm, val: T) !Val {
             return interned_key.toVal();
         },
         Symbol.InternedKey => return val.toVal(),
-        []const Val => {
+        []const Val, []Val => {
             const owned_list = try vm.allocator().dupe(Val, val);
             return fromOwnedList(vm, owned_list);
         },
@@ -192,7 +193,7 @@ pub fn fromOwnedList(vm: *Vm, owned_list: []Val) !Val {
 
 pub fn fromSymbolStr(vm: *Vm, symbol_str: []const u8) !Val {
     const symbol = try Symbol.fromStr(symbol_str);
-    return Val.fromZig(Symbol, vm, symbol);
+    return Val.fromZig(vm, symbol);
 }
 
 pub fn asInternedSymbol(self: Val) ?Symbol.Interned {

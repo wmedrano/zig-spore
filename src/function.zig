@@ -92,7 +92,7 @@ pub const FunctionVal = struct {
     ///       const args = vm.stack.local();
     ///       if (args.len != 1) return Val.FunctionError.WrongArity;
     ///       const arg = try args[0].toZig(i64, vm);
-    ///       return Val.fromZig(i64, vm, 2 + arg);
+    ///       return Val.fromZig(vm, 2 + arg);
     ///   }
     /// const my_func = FunctionVal.init("add-2", addTwo);
     /// ```

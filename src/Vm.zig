@@ -2,7 +2,7 @@
 //!     const args = vm.stack.local();
 //!     if (args.len != 1) return Val.FunctionError.WrongArity;
 //!     const arg = try args[0].toZig(i64, vm);
-//!     return Val.fromZig(i64, vm, 2 + arg);
+//!     return Val.fromZig(vm, 2 + arg);
 //! }
 //!
 //! test "can eval custom fuction" {
@@ -21,6 +21,7 @@ const Compiler = @import("Compiler.zig");
 const Instruction = @import("instruction.zig").Instruction;
 const Module = @import("Module.zig");
 const Stack = @import("Stack.zig");
+const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const builtins = @import("builtins.zig");
 const function = @import("function.zig");
@@ -127,6 +128,22 @@ pub fn runGc(self: *Vm) !void {
         self.objects.markReachable(v.*);
     }
     try self.objects.sweepUnreachable(self.allocator());
+}
+
+pub fn initSymbolTable(self: *Vm, T: type) !T {
+    const type_info = @typeInfo(T);
+    const struct_info = switch (type_info) {
+        .Struct => |s| s,
+        else => @compileError("initSymbolTable type T must be struct but found type " ++ @typeName(T)),
+    };
+    const ret: T = undefined;
+    inline for (struct_info.fields) |field| {
+        @field(ret, field.name) = try Val.fromZig(
+            self,
+            .{ .quotes = 0, .name = field.name },
+        );
+    }
+    return ret;
 }
 
 fn run(self: *Vm) !Val {
