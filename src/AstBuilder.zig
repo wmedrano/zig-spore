@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const AstError = @import("error.zig").AstError;
 const Symbol = @import("Symbol.zig");
 const Tokenizer = @import("Tokenizer.zig");
 const Val = @import("Val.zig");
@@ -15,15 +16,6 @@ pub const Ast = struct {
 vm: *Vm,
 tokenizer: Tokenizer,
 
-pub const Error = error{
-    TooManyQuotes,
-    EmptyKey,
-    EmptySymbol,
-    EmptyAtom,
-    BadString,
-    UnexpectedCloseParen,
-} || std.mem.Allocator.Error;
-
 pub fn init(vm: *Vm, source: []const u8) AstBuilder {
     return AstBuilder{
         .vm = vm,
@@ -31,7 +23,7 @@ pub fn init(vm: *Vm, source: []const u8) AstBuilder {
     };
 }
 
-pub fn next(self: *AstBuilder) Error!?Ast {
+pub fn next(self: *AstBuilder) AstError!?Ast {
     const next_token: Tokenizer.Token = if (self.tokenizer.next()) |t| t else return null;
     const start = next_token.location.start;
     switch (next_token.token_type) {
@@ -54,7 +46,7 @@ pub fn next(self: *AstBuilder) Error!?Ast {
     return null;
 }
 
-pub fn parseAll(self: *AstBuilder, allocator: std.mem.Allocator) Error![]Ast {
+pub fn parseAll(self: *AstBuilder, allocator: std.mem.Allocator) AstError![]Ast {
     var ret = std.ArrayListUnmanaged(Ast){};
     defer ret.deinit(allocator);
     while (try self.next()) |ast| {
@@ -63,7 +55,7 @@ pub fn parseAll(self: *AstBuilder, allocator: std.mem.Allocator) Error![]Ast {
     return ret.toOwnedSlice(allocator);
 }
 
-fn parseList(self: *AstBuilder) Error![]Val {
+fn parseList(self: *AstBuilder) AstError![]Val {
     var list = std.ArrayListUnmanaged(Val){};
     defer list.deinit(self.vm.allocator());
     while (self.tokenizer.next()) |token| {
@@ -82,7 +74,7 @@ fn parseList(self: *AstBuilder) Error![]Val {
     return list.toOwnedSlice(self.vm.allocator());
 }
 
-fn atomToVal(vm: *Vm, atom: []const u8) Error!Val {
+fn atomToVal(vm: *Vm, atom: []const u8) AstError!Val {
     if (atom.len == 0) {
         return error.EmptyAtom;
     }
@@ -104,10 +96,11 @@ fn atomToVal(vm: *Vm, atom: []const u8) Error!Val {
     if (std.fmt.parseFloat(f64, atom)) |x| {
         return Val.fromZig(vm, x);
     } else |_| {}
-    return Val.fromSymbolStr(vm, atom);
+    const symbol = try Symbol.fromStr(atom);
+    return Val.fromZig(vm, symbol);
 }
 
-fn stringAtomToVal(vm: *Vm, atom: []const u8) Error!Val {
+fn stringAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
     if (atom.len < 2) {
         return error.BadString;
     }
@@ -136,9 +129,9 @@ fn stringAtomToVal(vm: *Vm, atom: []const u8) Error!Val {
     return Val.fromZig(vm, ret.items);
 }
 
-fn keyAtomToVal(vm: *Vm, atom: []const u8) Error!Val {
+fn keyAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
     if (atom.len < 2) {
-        return Error.EmptyKey;
+        return AstError.EmptyKey;
     }
     std.debug.assert(atom[0] == ':');
     return Val.fromZig(vm, Symbol.Key{ .name = atom[1..] });
@@ -166,11 +159,11 @@ test "parse atoms" {
         &[_]Ast{
             .{
                 .location = .{ .start = 0, .end = 1 },
-                .expr = try Val.fromZig(&vm, @as(i64, 0)),
+                .expr = try Val.fromZig(&vm, 0),
             },
             .{
                 .location = .{ .start = 2, .end = 5 },
-                .expr = try Val.fromZig(&vm, @as(f64, 1)),
+                .expr = try Val.fromZig(&vm, 1.0),
             },
             .{
                 .location = .{ .start = 6, .end = 14 },
@@ -178,11 +171,11 @@ test "parse atoms" {
             },
             .{
                 .location = .{ .start = 15, .end = 21 },
-                .expr = try Val.fromZig(&vm, Symbol{ .quotes = 0, .name = "symbol" }),
+                .expr = try Val.fromZig(&vm, try Symbol.fromStr("symbol")),
             },
             .{
                 .location = .{ .start = 22, .end = 36 },
-                .expr = try Val.fromZig(&vm, Symbol{ .quotes = 1, .name = "quoted-symbol" }),
+                .expr = try Val.fromZig(&vm, Symbol{ ._quotes = 1, ._name = "quoted-symbol" }),
             },
             .{
                 .location = .{ .start = 37, .end = 41 },

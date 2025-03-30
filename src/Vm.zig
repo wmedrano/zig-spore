@@ -3,6 +3,7 @@
 //! `Vm.evalStr` can be used to evaluate code. To register values, see
 //! methods like `Module.registerValue` and `Module.registerFunction`.
 //!
+//! ```zig
 //! test "can evaluate code" {
 //!     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
 //!     defer vm.deinit();
@@ -15,6 +16,7 @@
 const std = @import("std");
 
 const AstBuilder = @import("AstBuilder.zig");
+const ByteCodeFunction = @import("ByteCodeFunction.zig");
 const Compiler = @import("Compiler.zig");
 const Instruction = @import("instruction.zig").Instruction;
 const Module = @import("Module.zig");
@@ -22,7 +24,6 @@ const Stack = @import("Stack.zig");
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const builtins = @import("builtins.zig");
-const function = @import("function.zig");
 
 const ObjectManager = @import("ObjectManager.zig");
 
@@ -46,7 +47,8 @@ stack: Stack,
 
 /// Options for operating the virtual machine.
 pub const Options = struct {
-    /// If logging is enabled.
+    /// If logging should be enabled. This is useful for printing out
+    /// more information on errors.
     log: bool = false,
 
     /// The allocator to use. All objects on the `Vm` will use this
@@ -119,7 +121,7 @@ pub fn runGc(self: *Vm) !void {
         self.objects.markReachable(v);
     }
     for (self.stack.frames.items) |stack_frame| {
-        function.ByteCodeFunction.markInstructions(stack_frame.instructions, &self.objects);
+        ByteCodeFunction.markInstructions(stack_frame.instructions, &self.objects);
     }
     var globalsIter = self.global.values.valueIterator();
     while (globalsIter.next()) |v| {

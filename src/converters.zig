@@ -1,9 +1,9 @@
 const std = @import("std");
 
+const Error = @import("error.zig").Error;
 const Symbol = @import("Symbol.zig");
 const Val = @import("./Val.zig");
 const Vm = @import("Vm.zig");
-const function = @import("function.zig");
 
 /// Create a struct where each field contains a `Symbol.Interned`
 /// corresponding to the name of that field.
@@ -26,7 +26,7 @@ pub fn symbolTable(self: *Vm, T: type) !T {
                     @typeName(field.type) ++ ".",
             );
         }
-        const symbol = Symbol{ .quotes = 0, .name = field.name };
+        const symbol = try Symbol.fromStr(field.name);
         @field(ret, field.name) = try symbol.intern(self);
     }
     return ret;
@@ -46,8 +46,8 @@ pub fn parseAsArgs(
         else => @compileError("parseAsArgs type T must be struct but found type " ++ @typeName(T)),
     };
     var ret: T = undefined;
-    if (struct_info.fields.len > vals.len) return function.Error.WrongArity;
-    if (!has_rest and struct_info.fields.len < vals.len) return function.Error.WrongArity;
+    if (struct_info.fields.len > vals.len) return Error.WrongArity;
+    if (!has_rest and struct_info.fields.len < vals.len) return Error.WrongArity;
     inline for (struct_info.fields, 0..struct_info.fields.len) |field, idx| {
         if (has_rest and idx == struct_info.fields.len - 1) {
             @field(ret, field.name) = vals[idx..];

@@ -1,9 +1,10 @@
 const std = @import("std");
 
+const ByteCodeFunction = @import("ByteCodeFunction.zig");
+const Error = @import("error.zig").Error;
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
-const function = @import("function.zig");
 
 pub const InstructionTag = enum {
     push,
@@ -61,17 +62,17 @@ pub const Instruction = union(InstructionTag) {
     }
 
     fn executeEval(vm: *Vm, n: u32) !void {
-        if (n == 0) return function.Error.WrongArity;
+        if (n == 0) return Error.WrongArity;
         const function_idx = vm.stack.items.len - n;
         const stack_start = function_idx + 1;
         const function_val = vm.stack.items[function_idx];
-        switch (function_val.repr) {
+        switch (function_val._repr) {
             .function => |f| {
                 const result = try f.execute(vm, stack_start);
                 vm.stack.items[function_idx] = result;
             },
             .bytecode_function => |bytecode_id| {
-                const bytecode = vm.objects.get(function.ByteCodeFunction, bytecode_id).?;
+                const bytecode = vm.objects.get(ByteCodeFunction, bytecode_id).?;
                 try bytecode.startExecute(vm, stack_start);
             },
             else => {

@@ -1,14 +1,16 @@
 const std = @import("std");
 
+const ByteCodeFunction = @import("ByteCodeFunction.zig");
+const List = @import("List.zig");
 const ObjectManager = @This();
+const String = @import("String.zig");
 const StringInterner = @import("StringInterner.zig");
 const Val = @import("Val.zig");
-const function = @import("function.zig");
 
 string_interner: StringInterner = .{},
-strings: ObjectStorage(Val.String) = .{},
-lists: ObjectStorage(Val.List) = .{},
-bytecode_functions: ObjectStorage(function.ByteCodeFunction) = .{},
+strings: ObjectStorage(String) = .{},
+lists: ObjectStorage(List) = .{},
+bytecode_functions: ObjectStorage(ByteCodeFunction) = .{},
 reachable_color: Color = Color.blue,
 
 pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
@@ -20,9 +22,9 @@ pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
 
 pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator, val: T) !Id(T) {
     var object_storage = switch (T) {
-        Val.String => &self.strings,
-        Val.List => &self.lists,
-        function.ByteCodeFunction => &self.bytecode_functions,
+        String => &self.strings,
+        List => &self.lists,
+        ByteCodeFunction => &self.bytecode_functions,
         else => @compileError("type not supported"),
     };
     return object_storage.put(allocator, val, self.unreachableColor());
@@ -30,16 +32,16 @@ pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator,
 
 pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
     const object_storage = switch (T) {
-        Val.String => self.strings,
-        Val.List => self.lists,
-        function.ByteCodeFunction => self.bytecode_functions,
+        String => self.strings,
+        List => self.lists,
+        ByteCodeFunction => self.bytecode_functions,
         else => @compileError("type not supported"),
     };
     return object_storage.get(id);
 }
 
 pub fn markReachable(self: *ObjectManager, val: Val) void {
-    switch (val.repr) {
+    switch (val._repr) {
         .void => {},
         .bool => {},
         .int => {},
@@ -96,8 +98,11 @@ fn ObjectStorage(comptime T: type) type {
                 .idx = @intCast(self.objects.items.len),
             };
             try self.objects.append(allocator, obj);
+            errdefer _ = self.objects.popOrNull();
             try self.tags.append(allocator, id.tag);
+            errdefer _ = self.tags.popOrNull();
             try self.color.append(allocator, color);
+            errdefer _ = self.color.popOrNull();
             return id;
         }
 
@@ -165,9 +170,9 @@ pub fn Id(comptime T: type) type {
         const Self = @This();
         pub fn toVal(self: Self) Val {
             switch (T) {
-                Val.String => return Val{ .repr = .{ .string = self } },
-                Val.List => return Val{ .repr = .{ .list = self } },
-                function.ByteCodeFunction => return Val{ .repr = .{ .bytecode_function = self } },
+                String => return Val{ ._repr = .{ .string = self } },
+                List => return Val{ ._repr = .{ .list = self } },
+                ByteCodeFunction => return Val{ ._repr = .{ .bytecode_function = self } },
                 else => @compileError("no valid conversion to Val"),
             }
         }

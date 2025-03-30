@@ -5,31 +5,46 @@ const Vm = @import("Vm.zig");
 
 const Symbol = @This();
 
-quotes: u2,
-name: []const u8,
+_quotes: u2,
+_name: []const u8,
 
 pub fn fromStr(str: []const u8) !Symbol {
-    var quotes: usize = 0;
-    while (quotes < str.len and str[quotes] == '\'') {
-        quotes += 1;
+    var quotes_count: usize = 0;
+    while (quotes_count < str.len and str[quotes_count] == '\'') {
+        quotes_count += 1;
     }
-    if (quotes > std.math.maxInt(u2)) {
+    if (quotes_count > std.math.maxInt(u2)) {
         return error.TooManyQuotes;
     }
-    const name = str[quotes..];
-    if (name.len == 0) return error.EmptySymbol;
+    const unquoted_name = str[quotes_count..];
+    if (unquoted_name.len == 0) return error.EmptySymbol;
     return Symbol{
-        .quotes = @intCast(quotes),
-        .name = name,
+        ._quotes = @intCast(quotes_count),
+        ._name = unquoted_name,
     };
+}
+
+/// Returns the number of quotes.
+pub fn quotes(self: Symbol) u2 {
+    return self._quotes;
+}
+
+/// Returns `true` if `self` is quoted.
+pub fn isQuoted(self: Symbol) bool {
+    return self._quotes != 0;
+}
+
+/// Returns the underlying (unquoted) name.
+pub fn name(self: Symbol) []const u8 {
+    return self._name;
 }
 
 pub fn intern(self: Symbol, vm: *Vm) !Interned {
     const id = try vm.objects.string_interner.internToId(
         vm.allocator(),
-        self.name,
+        self._name,
     );
-    return .{ .quotes = self.quotes, .id = id };
+    return .{ .quotes = self._quotes, .id = id };
 }
 
 pub fn format(
@@ -40,11 +55,11 @@ pub fn format(
 ) !void {
     _ = fmt;
     _ = options;
-    switch (self.quotes) {
-        0 => try writer.print("{s}", .{self.name}),
-        1 => try writer.print("'{s}", .{self.name}),
-        2 => try writer.print("''{s}", .{self.name}),
-        3 => try writer.print("'''{s}", .{self.name}),
+    switch (self._quotes) {
+        0 => try writer.print("{s}", .{self._name}),
+        1 => try writer.print("'{s}", .{self._name}),
+        2 => try writer.print("''{s}", .{self._name}),
+        3 => try writer.print("'''{s}", .{self._name}),
     }
 }
 
@@ -66,7 +81,7 @@ pub const InternedKey = packed struct {
     }
 
     pub fn toVal(self: InternedKey) Val {
-        return .{ .repr = .{ .key = self } };
+        return .{ ._repr = .{ .key = self } };
     }
 };
 
@@ -98,12 +113,12 @@ pub const Interned = packed struct {
     }
 
     pub fn toVal(self: Interned) Val {
-        return .{ .repr = .{ .symbol = self } };
+        return .{ ._repr = .{ .symbol = self } };
     }
 
     pub fn toSymbol(self: Interned, vm: *const Vm) ?Symbol {
         const maybe_str = if (vm.objects.string_interner.getString(self.id)) |s| s else return null;
-        return .{ .quotes = self.quotes, .name = maybe_str };
+        return .{ ._quotes = self.quotes, ._name = maybe_str };
     }
 
     pub fn quoted(self: Interned) Interned {

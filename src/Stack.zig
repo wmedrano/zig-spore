@@ -1,10 +1,10 @@
 const std = @import("std");
 
+const Error = @import("error.zig").Error;
 const Instruction = @import("instruction.zig").Instruction;
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 const config = @import("config.zig");
-const function = @import("function.zig");
 
 const Stack = @This();
 
@@ -65,7 +65,7 @@ pub fn push(self: *Stack, val: Val) !void {
 }
 
 pub fn pushMany(self: *Stack, vals: []const Val) !void {
-    if (self.items.len + vals.len > config.max_stack_len) return function.Error.StackOverflow;
+    if (self.items.len + vals.len > config.max_stack_len) return Error.StackOverflow;
     const start = self.items.len;
     const end = start + vals.len;
     self.items.len = end;
@@ -83,7 +83,7 @@ pub fn currentFrame(self: Stack) ?*Frame {
 
 /// Push a new stack frame to the virtual machine.
 pub fn pushFrame(self: *Stack, frame: Frame) !void {
-    if (self.frames.capacity == self.frames.items.len) return function.Error.StackOverflow;
+    if (self.frames.capacity == self.frames.items.len) return Error.StackOverflow;
     self.frames.appendAssumeCapacity(frame);
 }
 
@@ -92,8 +92,8 @@ pub fn pushFrame(self: *Stack, frame: Frame) !void {
 ///
 /// The value at the top of the stack is usually the return value. If
 /// the stack is empty, then a void value is returned.
-pub fn popFrame(self: *Stack) function.Error!Val {
-    const frame = if (self.frames.popOrNull()) |x| x else return function.Error.StackFrameUnderflow;
+pub fn popFrame(self: *Stack) Error!Val {
+    const frame = if (self.frames.popOrNull()) |x| x else return Error.StackFrameUnderflow;
     const return_value = if (frame.stack_start <= self.items.len and self.items.len > 0)
         self.items[self.items.len - 1]
     else

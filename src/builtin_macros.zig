@@ -1,33 +1,33 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
+const Error = @import("error.zig").Error;
 const Instruction = @import("instruction.zig").Instruction;
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 const converters = @import("converters.zig");
-const function = @import("function.zig");
 
-pub fn defMacro(vm: *Vm) function.Error!Val {
+pub fn defMacro(vm: *Vm) Error!Val {
     const expr = vm.stack.local();
     if (expr.len != 2) {
-        return function.Error.BadDefine;
+        return Error.BadDefine;
     }
-    const symbol = if (expr[0].asInternedSymbol()) |x| x.quoted() else return function.Error.ExpectedIdentifier;
+    const symbol = expr[0].toZig(Symbol.Interned, {}) catch return Error.ExpectedIdentifier;
     return try Val.fromZig(vm, @as([]const Val, &[_]Val{
-        try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "%define" }),
-        symbol.toVal(),
+        try Val.fromZig(vm, try Symbol.fromStr("%define")),
+        symbol.quoted().toVal(),
         expr[1],
     }));
 }
 
-pub fn defunMacro(vm: *Vm) function.Error!Val {
-    const function_symbol = try (Symbol{ .quotes = 0, .name = "function" }).intern(vm);
+pub fn defunMacro(vm: *Vm) Error!Val {
+    const function_symbol = try (try Symbol.fromStr("function")).intern(vm);
     const expr = vm.stack.local();
     if (expr.len < 3) {
-        return function.Error.BadDefine;
+        return Error.BadDefine;
     }
-    const function_name = if (expr[0].asInternedSymbol()) |s| s else return function.Error.BadDefine;
+    const function_name = expr[0].toZig(Symbol.Interned, {}) catch return Error.BadDefine;
     const args = expr[1];
     const body = expr[2..];
     var function_expr = try std.ArrayListUnmanaged(Val).initCapacity(
@@ -45,19 +45,19 @@ pub fn defunMacro(vm: *Vm) function.Error!Val {
     return try Val.fromZig(
         vm,
         @as([]const Val, &[_]Val{
-            try Val.fromZig(vm, Symbol{ .quotes = 0, .name = "%define" }),
+            try Val.fromZig(vm, try Symbol.fromStr("%define")),
             function_name.quoted().toVal(),
             function_expr_val,
         }),
     );
 }
 
-pub fn whenMacro(vm: *Vm) function.Error!Val {
-    const if_symbol = try (Symbol{ .quotes = 0, .name = "if" }).intern(vm);
-    const do_symbol = try (Symbol{ .quotes = 0, .name = "do" }).intern(vm);
+pub fn whenMacro(vm: *Vm) Error!Val {
+    const if_symbol = try (try Symbol.fromStr("if")).intern(vm);
+    const do_symbol = try (try Symbol.fromStr("do")).intern(vm);
     const expr = vm.stack.local();
     if (expr.len < 2) {
-        return function.Error.BadWhen;
+        return Error.BadWhen;
     }
     var body_expr = try vm.allocator().dupe(Val, expr);
     defer vm.allocator().free(body_expr);

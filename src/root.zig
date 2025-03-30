@@ -1,12 +1,16 @@
 //! Zig integration for the Spore scripting language.
 //!
 //! The bulk of the work is done by the `Vm` struct.
+const std = @import("std");
+
+const ByteCodeFunction = @import("ByteCodeFunction.zig");
+const NativeFunction = @import("NativeFunction.zig");
+const Symbol = @import("Symbol.zig");
+
+pub const Error = @import("error.zig").Error;
 pub const Module = @import("Module.zig");
 pub const Val = @import("Val.zig");
 pub const Vm = @import("Vm.zig");
-const function = @import("function.zig");
-
-const std = @import("std");
 
 test "can make vm" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
@@ -30,7 +34,10 @@ test "eval can return symbol" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     const actual = try vm.evalStr(Val, "'+");
-    try std.testing.expectEqual(try Val.fromSymbolStr(&vm, "+"), actual);
+    try std.testing.expectEqual(
+        try Val.fromZig(&vm, try Symbol.fromStr("+")),
+        actual,
+    );
 }
 
 test "eval multiple constants returns last constant" {
@@ -103,16 +110,16 @@ test "can eval recursive function" {
     );
 }
 
-fn addTwoFn(vm: *Vm) function.Error!Val {
+fn addTwoFn(vm: *Vm) Error!Val {
     const args = vm.stack.local();
-    if (args.len != 1) return function.Error.WrongArity;
+    if (args.len != 1) return Error.WrongArity;
     const arg = try args[0].toZig(i64, vm);
     return Val.fromZig(vm, 2 + arg);
 }
 
 test "can eval custom fuction" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    try vm.global.registerFunction(&vm, function.FunctionVal.init("add-2", addTwoFn));
+    try vm.global.registerFunction(&vm, NativeFunction.init("add-2", addTwoFn));
     defer vm.deinit();
     try std.testing.expectEqual(
         10,
