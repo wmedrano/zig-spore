@@ -17,6 +17,8 @@ pub const Number = @import("number.zig").Number;
 
 const Val = @This();
 
+/// The data inside the value. Prefer to use `fromZig` to construct a
+/// new `Val` or `toZig` to extract from a `Val` when possible.
 _repr: ValRepr,
 
 pub const ValTag = enum {
@@ -60,7 +62,8 @@ pub fn init() Val {
 /// - `f64` or `comptime_float` - Converts to a `Val.float`.
 /// - `Val.Number` - Converts to a value that holds an int or float.
 /// - `[]const u8` or `[]u8` - Creates a new `Val.string` by copying the slice
-///     contents.
+///      contents. Note, string literals may require using `@as`:
+///      `@as([]const u8, "my-string-literal")`
 /// - `Symbol` - Converts to a `Val.symbol`.
 /// - `Symbol.Interned` - Converts to a `Val.symbol`.
 /// - `[]const Val` or `[]Val` - Converts to a `Val.list`.
@@ -142,14 +145,10 @@ pub fn is(self: Val, comptime T: type) bool {
     }
 }
 
-/// Convert from a Spore `Val` to a Zig value.
+/// Convert from a Spore `Val` to a Zig value of type `T`.
 ///
 /// Supported Types `T`:
-/// - `void`
-/// - `bool`
-/// - `i64`
-/// - `f64`
-/// - `Val.Number`
+/// - `void`, `bool`, `i64`, `f64`, `Val.Number`.
 /// - `[]const u8` (returns a slice pointing to the Val's internal string)
 /// - `Symbol` or `Symbol.Interned`
 /// - `Symbol.Key` or `InternedKey`

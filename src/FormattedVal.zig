@@ -1,9 +1,11 @@
 const std = @import("std");
 
 const ByteCodeFunction = @import("ByteCodeFunction.zig");
+const NativeFunction = @import("NativeFunction.zig");
 const Symbol = @import("Symbol.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
+const Error = @import("error.zig").Error;
 
 const FormattedVal = @This();
 
@@ -55,4 +57,177 @@ pub fn format(
             try writer.print("(function {s})", .{f.name});
         },
     }
+}
+
+test "void" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectFmt(
+        "<void>",
+        "{any}",
+        .{Val.init().formatted(&vm)},
+    );
+}
+
+test "bool" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectFmt(
+        "true",
+        "{any}",
+        .{(try Val.fromZig(&vm, true)).formatted(&vm)},
+    );
+    try std.testing.expectFmt(
+        "false",
+        "{any}",
+        .{(try Val.fromZig(&vm, false)).formatted(&vm)},
+    );
+}
+
+test "int" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectFmt(
+        "123",
+        "{any}",
+        .{(try Val.fromZig(&vm, 123)).formatted(&vm)},
+    );
+}
+
+test "float" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectFmt(
+        "1.5e0",
+        "{any}",
+        .{(try Val.fromZig(&vm, 1.5)).formatted(&vm)},
+    );
+    try std.testing.expectFmt(
+        "1.2345e3",
+        "{any}",
+        .{(try Val.fromZig(&vm, 1234.5)).formatted(&vm)},
+    );
+}
+
+test "string" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const val = try Val.fromZig(&vm, @as([]const u8, "hello world"));
+    try std.testing.expectFmt(
+        "\"hello world\"",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
+}
+
+test "symbol" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const symbol = try Symbol.fromStr("my-symbol");
+    const val = try Val.fromZig(&vm, symbol);
+    try std.testing.expectFmt(
+        "my-symbol",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
+}
+
+test "quoted symbol" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const symbol = try Symbol.fromStr("''my-symbol");
+    try std.testing.expectEqual(2, symbol.quotes());
+    const val = try Val.fromZig(&vm, symbol);
+    try std.testing.expectFmt(
+        "''my-symbol",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
+}
+
+test "key" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const key = Symbol.Key{ .name = "my-key" };
+    const val = try Val.fromZig(&vm, key);
+    try std.testing.expectFmt(
+        ":my-key",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
+}
+
+test "list" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const list = [_]Val{
+        try Val.fromZig(&vm, 123),
+        try Val.fromZig(&vm, true),
+        try Val.fromZig(&vm, @as([]const u8, "hello")),
+    };
+    const val = try Val.fromZig(&vm, @as([]const Val, &list));
+    try std.testing.expectFmt(
+        "(123 true \"hello\")",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
+}
+
+test "empty list" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const list = [_]Val{};
+    const val = try Val.fromZig(&vm, @as([]const Val, &list));
+    try std.testing.expectFmt(
+        "()",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
+}
+
+test "nested list" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const list1 = [_]Val{
+        try Val.fromZig(&vm, 123),
+        try Val.fromZig(&vm, true),
+    };
+    const list2 = [_]Val{
+        try Val.fromZig(&vm, @as([]const Val, &list1)),
+        try Val.fromZig(&vm, @as([]const u8, "hello")),
+    };
+    const val = try Val.fromZig(&vm, @as([]const Val, &list2));
+    try std.testing.expectFmt(
+        "((123 true) \"hello\")",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
+}
+
+fn myFunc(_: *Vm) Error!Val {
+    return Val.init();
+}
+
+test "native function" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.global.registerFunction(&vm, NativeFunction.init("my-func", myFunc));
+    const val = try vm.evalStr(Val, "my-func");
+    try std.testing.expectFmt(
+        "(native-function my-func)",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
+}
+
+test "bytecode function" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.evalStr(void, "(defun foo () 42)");
+    const val = try vm.evalStr(Val, "foo");
+    try std.testing.expectFmt(
+        "(function foo)",
+        "{any}",
+        .{val.formatted(&vm)},
+    );
 }
