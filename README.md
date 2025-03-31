@@ -89,13 +89,16 @@ pub fn main() !void {
 }
 ```
 
-This example demonstrates initializing the VM, registering a Zig function named `addTwo`, and calling it from Spore code.
+This example demonstrates initializing the VM, registering a Zig
+function named `addTwo`, and calling it from Spore code.
 
 ## Spore Language Reference
 
 Spore is a simple Lisp dialect designed for embedding in Zig projects.
 
-Lisp is known for its parenthesized syntax, flexibility, and metaprogramming capabilities. Embedding Spore lets you customize and extend your Zig applications at runtime.
+Lisp is known for its parenthesized syntax, flexibility, and
+metaprogramming capabilities. Embedding Spore lets you customize and
+extend your Zig applications at runtime.
 
 ### Defining Values
 
@@ -108,7 +111,9 @@ Use `def` to define a new value.
 
 ### Defining Functions
 
-Use `defun` to define a new function. The first argument is the function name, the second is a list of arguments, and the remaining arguments are the body of the function.
+Use `defun` to define a new function. The first argument is the
+function name, the second is a list of arguments, and the remaining
+arguments are the body of the function.
 
 ```lisp
 (defun add (a b) (+ a b))
@@ -116,7 +121,8 @@ Use `defun` to define a new function. The first argument is the function name, t
 
 ### Calling Functions
 
-Call functions by placing the function name (or a symbol that resolves to a function) first, followed by the arguments.
+Call functions by placing the function name (or a symbol that resolves
+to a function) first, followed by the arguments.
 
 ```lisp
 (def x 10)
@@ -125,24 +131,34 @@ Call functions by placing the function name (or a symbol that resolves to a func
 
 ### `if` Statement
 
-The `if` statement takes a condition, a "then" branch, and an optional "else" branch.
+The `if` statement takes a condition, a "then" branch, and an optional
+"else" branch.
 
 ```lisp
-(if (> 10 5) "yes" "no") ; "yes"
+(if (> 10 5)
+  (print "yes")
+  (print "no")) ; prints "yes"
+
 ;; returns 42, prints "hello"
-;; TODO: Add a `print` function to the language.
-(if true (do (print "hello") 42))
+(if true
+  (do
+    (print "hello")
+    42))
+    
+;; returns void
+(if false 42)
 ```
 
 ### `when` Statement
 
-The `when` statement is like an `if` statement without an "else" branch. It executes the body if the condition is true.
+The `when` statement is like an `if` statement without an "else"
+branch. It executes the body if the condition is true.
 
 ```lisp
 (when true
   (print "executing when")
   (print "this other statement also executes")
-  (print "and so does any other statement we add"))
+  (print "and so does any other statement"))
 
 (when false
   (print "not executing when")

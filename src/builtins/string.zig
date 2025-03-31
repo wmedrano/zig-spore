@@ -11,6 +11,7 @@ pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, NativeFunction.withArgParser("str-len", strLenFn));
     try vm.global.registerFunction(vm, NativeFunction.init("str->sexps", strToSexpsFn));
     try vm.global.registerFunction(vm, NativeFunction.init("str->sexp", strToSexpFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser("print", printFn));
 }
 
 pub fn strLenFn(vm: *Vm, args: struct { str: []const u8 }) Error!Val {
@@ -60,4 +61,15 @@ test "str->sexp produces s-expression" {
         "{any}",
         .{actual.formatted(&vm)},
     );
+}
+
+fn printFn(vm: *Vm, args: struct { val: Val }) Error!Val {
+    if (args.val.is([]const u8)) {
+        const str = try args.val.toZig([]const u8, vm);
+        std.debug.print("{s}\n", .{str});
+    } else {
+        const formatted = args.val.formatted(vm);
+        std.debug.print("{any}\n", .{formatted});
+    }
+    return Val.init();
 }
