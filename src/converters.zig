@@ -35,10 +35,36 @@ pub fn symbolTable(self: *Vm, T: type) !T {
 /// Parse `vals` into a struct of type `T`. The `nth` value in `vals`
 /// is parsed into the `nth` field of `T`.
 ///
-/// If `rest: []const Val` is present, any unparsed args will be
-/// placed in rest.
+/// If `T` has a field named `rest` of type `[]const Val`, any unparsed
+/// `Val`s will be collected into a slice and assigned to the `rest` field.
 ///
-/// WARNING: When `rest` is present, the remaining values are put into
+/// Returns `Error.WrongArity` if there are not enough `Val`s to fill
+/// the required fields of `T`, or if there are too many `Val`s and
+/// `T` does not have a `rest` field.
+///
+/// # Example
+/// Each `Val` will be parsed into the corresponding field using
+/// `Val.toZig`.
+///
+/// ```zig
+/// var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+/// defer vm.deinit();
+///
+/// const Args = struct {
+///     name: []const u8,
+///     age: i64,
+/// };
+/// const vals = [_]Val{
+///     try Val.fromZig(&vm, @as([]const u8, "ziggling")),
+///     try Val.fromZig(&vm, 12),
+/// };
+/// const args = try parseAsArgs(Args, &vm, &vals);
+/// try std.testing.expectEqualStrings(@as([]const u8, "ziggling"), args.name);
+/// try std.testing.expectEqual(12, args.age);
+/// ```
+///
+/// # WARNING
+/// When `rest` is present, the remaining values are put into
 /// the final field, reguardless if it is `rest` or not. TODO: Add
 /// compile check to assert that `rest` is the final field.
 pub fn parseAsArgs(
@@ -115,17 +141,16 @@ test "parseAsArgs into struct" {
     defer vm.deinit();
 
     const Args = struct {
-        a: i64,
-        b: f64,
+        name: []const u8,
+        age: i64,
     };
-
     const vals = [_]Val{
-        try Val.fromZig(&vm, 1),
-        try Val.fromZig(&vm, 2.0),
+        try Val.fromZig(&vm, @as([]const u8, "ziggling")),
+        try Val.fromZig(&vm, 12),
     };
-
     const args = try parseAsArgs(Args, &vm, &vals);
-    try std.testing.expectEqualDeep(Args{ .a = 1, .b = 2.0 }, args);
+    try std.testing.expectEqualStrings(@as([]const u8, "ziggling"), args.name);
+    try std.testing.expectEqual(12, args.age);
 }
 
 test "parseAsArgs with rest" {

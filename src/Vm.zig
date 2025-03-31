@@ -3,6 +3,8 @@
 //! `Vm.evalStr` can be used to evaluate code. To register values, see
 //! methods like `Module.registerValue` and `Module.registerFunction`.
 //!
+//! # Example
+//!
 //! ```zig
 //! test "can evaluate code" {
 //!     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });

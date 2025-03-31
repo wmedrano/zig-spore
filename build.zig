@@ -58,7 +58,7 @@ pub fn build(b: *std.Build) void {
         },
     );
     const install_site_docs = b.addInstallDirectory(.{
-        .source_dir = install_docs.options.source_dir,
+        .source_dir = lib.getEmittedDocs(),
         .install_dir = .prefix,
         .install_subdir = "site",
     });

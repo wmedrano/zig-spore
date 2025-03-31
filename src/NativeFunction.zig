@@ -1,4 +1,5 @@
-//! Contains a Zig function that can be evaluated within a `Vm`.
+//! Defines `NativeFunction`, which allows Zig functions to be called
+//from within a `Vm`.
 //!
 //! Note: All members should live for the lifetime of the `Vm`.
 const std = @import("std");
@@ -16,16 +17,21 @@ name: []const u8,
 /// The function implementation that takes the `Vm` and returns a `Val`.
 function: *const fn (*Vm) Error!Val,
 
-/// Create a new function from a Zig function.
+/// Create a `NativeFunction` from a Zig function that takes a `*Vm`
+/// and returns a `Val`.
 ///
-/// Example:
+/// Note: Its usually easier to use `withArgParser` instead of
+/// extracting arguments out of `*Vm` manually.
+///
+/// # Example
+///
 /// ```zig
-///   pub fn addTwo(vm: *Vm) Val.FunctionError!Val {
-///       const args = vm.stack.local();
-///       if (args.len != 1) return Val.FunctionError.WrongArity;
-///       const arg = try args[0].toZig(i64, vm);
-///       return Val.fromZig(vm, 2 + arg);
-///   }
+/// pub fn addTwo(vm: *Vm) Error!Val {
+///     const args = vm.stack.local();
+///     if (args.len != 1) return Error.WrongArity;
+///     const arg = try args[0].toZig(i64, vm);
+///     return Val.fromZig(vm, 2 + arg);
+/// }
 /// const my_func = NativeFunction.init("add-2", addTwo);
 /// ```
 pub fn init(comptime func_name: []const u8, comptime func: *const fn (*Vm) Error!Val) *const NativeFunction {
@@ -38,17 +44,18 @@ pub fn init(comptime func_name: []const u8, comptime func: *const fn (*Vm) Error
     return &wrapped_function.native_function;
 }
 
-/// Create a new function from a Zig function. The first argument of
-/// n`func` must be `*Vm` and the second must be a struct to store all the
-/// parameters.
+/// Create a `NativeFunction` from a Zig function. The first argument
+/// of `func` must be a `*Vm` and the second must be a struct to store
+/// all the parameters.
 ///
-/// Arguments to `func` are parsed with `converters.parseAsArgs`.
+/// See `converters.parseAsArgs` for more details on argument parsing.
 ///
-/// Example:
+/// # Example
+///
 /// ```zig
-///   pub fn addTwoInts(vm: *Vm, args: struct{a: i64, b: i64}) Val.FunctionError!Val {
-///       return Val.fromZig(vm, args.a + args.b);
-///   }
+/// pub fn addTwoInts(vm: *Vm, args: struct{a: i64, b: i64}) Error!Val {
+///     return Val.fromZig(vm, args.a + args.b);
+/// }
 /// const my_func = NativeFunction.withArgParser("add-2-ints", addTwoInts);
 /// ```
 pub fn withArgParser(comptime func_name: []const u8, func: anytype) *const NativeFunction {
@@ -82,7 +89,7 @@ pub fn withArgParser(comptime func_name: []const u8, func: anytype) *const Nativ
     return &wrapped_function.native_function;
 }
 
-/// Execute `self` on`vm` with `args`.
+/// Execute `self` on `vm` with `args`.
 pub fn executeWith(self: NativeFunction, vm: *Vm, args: []const Val) !Val {
     const stack_start = vm.stack.items.len;
     try vm.stack.pushMany(args);

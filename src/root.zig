@@ -1,6 +1,7 @@
 //! Zig integration for the Spore scripting language.
 //!
-//! The bulk of the work is done by the `Vm` struct.
+//! The bulk of the work is done by the `Vm` struct and functions like
+//! `Vm.evalStr` and `Vm.runGc`.
 const std = @import("std");
 
 const ByteCodeFunction = @import("ByteCodeFunction.zig");

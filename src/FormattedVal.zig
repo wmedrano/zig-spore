@@ -21,24 +21,32 @@ pub fn format(
     _ = fmt;
     _ = options;
     switch (self.val._repr) {
-        .void => try writer.print("<void>", .{}),
+        .void => try writer.print("(<void>)", .{}),
         .bool => |x| try writer.print("{any}", .{x}),
         .int => |x| try writer.print("{any}", .{x}),
         .float => |x| try writer.print("{any}", .{x}),
         .string => {
-            const string = try self.val.toZig([]const u8, self.vm);
+            const string = self.val.toZig([]const u8, self.vm) catch {
+                return writer.print("(<invalid-string>)", .{});
+            };
             try writer.print("\"{s}\"", .{string});
         },
         .symbol => {
-            const symbol = try self.val.toZig(Symbol, self.vm);
+            const symbol = self.val.toZig(Symbol, self.vm) catch {
+                return writer.print("(<invalid-symbol>)", .{});
+            };
             try writer.print("{any}", .{symbol});
         },
         .key => {
-            const key = try self.val.toZig(Symbol.Key, self.vm);
+            const key = self.val.toZig(Symbol.Key, self.vm) catch {
+                return writer.print("(<invalid-key>)", .{});
+            };
             try writer.print("{any}", .{key});
         },
         .list => {
-            const list = try self.val.toZig([]const Val, self.vm);
+            const list = self.val.toZig([]const Val, self.vm) catch {
+                return writer.print("(<invalid-list>)", .{});
+            };
             try writer.print("(", .{});
             for (list, 0..list.len) |v, idx| {
                 if (idx == 0) {
@@ -53,7 +61,9 @@ pub fn format(
             try writer.print("(native-function {s})", .{f.name});
         },
         .bytecode_function => |id| {
-            const f = self.vm.objects.get(ByteCodeFunction, id).?;
+            const f = self.vm.objects.get(ByteCodeFunction, id) orelse {
+                return writer.print("(<invalid-function>)", .{});
+            };
             try writer.print("(function {s})", .{f.name});
         },
     }
@@ -63,7 +73,7 @@ test "void" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try std.testing.expectFmt(
-        "<void>",
+        "(<void>)",
         "{any}",
         .{Val.init().formatted(&vm)},
     );

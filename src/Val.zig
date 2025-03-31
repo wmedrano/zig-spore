@@ -87,8 +87,8 @@ pub fn fromZig(vm: *Vm, val: anytype) !Val {
         i64, comptime_int => return .{ ._repr = .{ .int = @as(i64, val) } },
         f64, comptime_float => return .{ ._repr = .{ .float = @as(f64, val) } },
         Number => switch (val) {
-            .int => |x| .{ ._repr = .{ .int = x } },
-            .float => |x| .{ ._repr = .{ .float = x } },
+            .int => |x| return .{ ._repr = .{ .int = x } },
+            .float => |x| return .{ ._repr = .{ .float = x } },
         },
         []const u8, []u8 => {
             const owned_string = try vm.allocator().dupe(u8, val);
@@ -147,19 +147,51 @@ pub fn is(self: Val, comptime T: type) bool {
 
 /// Convert from a Spore `Val` to a Zig value of type `T`.
 ///
-/// Supported Types `T`:
-/// - `void`, `bool`, `i64`, `f64`, `Val.Number`.
-/// - `[]const u8` (returns a slice pointing to the Val's internal string)
-/// - `Symbol` or `Symbol.Interned`
-/// - `Symbol.Key` or `InternedKey`
-/// - `[]const Val` (returns a slice pointing to the Val's internal list)
-/// - `*const NativeFunction` - A pointer to the function's metadata.
-/// - `ByteCodeFunction` - The Zig datastructure for a Spore VM function.
-/// - `?T` where T is a supported type.
+/// # Supported Types
 ///
-/// Note: For slice types (`[]const u8`, `[]const Val`), the returned slice's
+/// The following types may pass either `void` or a `*const Vm` as the
+/// `vm`:
+/// - `void`, `bool`, `i64`, `f64`, `Val.Number`
+/// - `Symbol.Interned`, `Symbol.InternedKey`
+/// - `*const NativeFunction`
+///
+/// The following types require passing `*const Vm` as the `vm`.
+/// - `[]const u8` (returns a slice pointing to the Val's internal string)
+/// - `Symbol`, `Symbol.Key`
+/// - `[]const Val` (returns a slice pointing to the Val's internal list)
+/// - `ByteCodeFunction` - The Zig datastructure for a Spore VM function.
+///
+/// The following types depend:
+/// - `?T` where T is a supported type. `*const Vm` is required for
+///   `?T` if `T` requires a `*const Vm`.
+///
+/// # Lifetime Warning
+/// For slice types (`[]const u8`, `[]const Val`), the returned slice's
 /// lifetime is tied to the underlying object in the Vm's ObjectManager.
 /// The caller must ensure the Vm and its objects outlive the use of the slice.
+///
+/// # Examples:
+/// ```zig
+/// test "toZig examples" {
+///     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
+///     defer vm.deinit();
+///
+///     // `void` vm type.
+///     const val = try Val.fromZig(&vm, 123);
+///     const number: i64 = try val.toZig(i64, {});
+///     try std.testing.expectEqual(@as(i64, 123), number);
+///
+///     // `*const Vm` type.
+///     const val2 = try Val.fromZig(&vm, @as([]const u8, "hello"));
+///     const hello: []const u8 = try val2.toZig([]const u8, &vm);
+///     try std.testing.expectEqualStrings("hello", hello);
+///
+///     // Optional type.
+///     const val3 = try Val.fromZig(&vm, Val.Number{.int = 10});
+///     const optional_num: ?Val.Number = try val3.toZig(?Val.Number, {});
+///     try std.testing.expectEqual(Val.Number{.int = 10}, optional_num);
+/// }
+/// ```
 pub fn toZig(self: Val, comptime T: type, vm: anytype) ToZigError!T {
     const VmType = @TypeOf(vm);
     if (VmType != *const Vm and VmType != *Vm and VmType != void) {
@@ -312,4 +344,24 @@ test "null to Zig returns void" {
 
 test "val is small" {
     try std.testing.expectEqual(2 * @sizeOf(u64), @sizeOf(Val));
+}
+
+test "toZig examples" {
+    var vm = try Vm.init(.{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // `void` vm type.
+    const val = try Val.fromZig(&vm, 123);
+    const number: i64 = try val.toZig(i64, {});
+    try std.testing.expectEqual(@as(i64, 123), number);
+
+    // `*const Vm` type.
+    const val2 = try Val.fromZig(&vm, @as([]const u8, "hello"));
+    const hello: []const u8 = try val2.toZig([]const u8, &vm);
+    try std.testing.expectEqualStrings("hello", hello);
+
+    // Optional type.
+    const val3 = try Val.fromZig(&vm, Val.Number{ .int = 10 });
+    const optional_num: ?Val.Number = try val3.toZig(?Val.Number, {});
+    try std.testing.expectEqual(Val.Number{ .int = 10 }, optional_num);
 }

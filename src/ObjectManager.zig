@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const ByteCodeFunction = @import("ByteCodeFunction.zig");
+const Error = @import("error.zig").Error;
 const List = @import("List.zig");
 const ObjectManager = @This();
 const String = @import("String.zig");
@@ -67,14 +68,10 @@ pub const Marker = struct {
     /// being collected during the next garbage collector run.
     pub fn markReachable(self: Marker, val: Val) void {
         switch (val._repr) {
-            .void => {},
-            .bool => {},
-            .int => {},
-            .float => {},
+            .void, .bool, .int, .float, .symbol, .key, .function => {
+                return;
+            },
             .string => |id| self.object_manager.strings.markReachable(id, self),
-            .symbol => {},
-            .key => {},
-            .function => {},
             .list => |id| self.object_manager.lists.markReachable(id, self),
             .bytecode_function => |id| self.object_manager.bytecode_functions.markReachable(id, self),
         }
@@ -149,12 +146,10 @@ fn ObjectStorage(comptime T: type) type {
             return &self.objects.items[id.idx];
         }
 
-        pub fn markReachable(self: *Self, id: Id(T), marker2: ObjectManager.Marker) void {
-            if (self.color.items[id.idx] != marker2.object_manager.reachable_color) {
-                self.color.items[id.idx] = marker2.object_manager.reachable_color;
-                if (self.get(id)) |v| {
-                    v.markChildren(marker2);
-                }
+        pub fn markReachable(self: *Self, id: Id(T), m: ObjectManager.Marker) void {
+            if (self.color.items[id.idx] != m.object_manager.reachable_color) {
+                self.color.items[id.idx] = m.object_manager.reachable_color;
+                if (self.get(id)) |v| v.markChildren(m);
             }
         }
 
@@ -213,4 +208,84 @@ pub fn Id(comptime T: type) type {
             }
         }
     };
+}
+
+test "garbage collector removes unused val" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // Before GC
+    const gc_val = try vm.evalStr(Val, @as([]const u8, "\"hello world\""));
+    try std.testing.expectEqualStrings(
+        "hello world",
+        try gc_val.toZig([]const u8, &vm),
+    );
+
+    // After GC
+    try vm.runGc(&.{});
+    try std.testing.expectError(
+        Error.ObjectNotFound,
+        gc_val.toZig([]const u8, &vm),
+    );
+}
+
+test "garbage collector keeps external value" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // Before GC
+    const keep_val = try vm.evalStr(Val, @as([]const u8, "\"hello world\""));
+    try std.testing.expectEqualStrings(
+        "hello world",
+        try keep_val.toZig([]const u8, &vm),
+    );
+
+    // After GC
+    try vm.runGc(&.{keep_val});
+    try std.testing.expectEqualStrings(
+        "hello world",
+        try keep_val.toZig([]const u8, &vm),
+    );
+}
+
+test "garbage collector keeps global value" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // Before GC
+    const global_val = try vm.evalStr(Val, @as([]const u8, "\"hello world\""));
+    try vm.global.registerValueByName(&vm, "global-value", global_val);
+    try std.testing.expectEqualStrings(
+        "hello world",
+        try vm.evalStr([]const u8, "global-value"),
+    );
+
+    // After GC
+    try vm.runGc(&.{});
+    try std.testing.expectEqualStrings(
+        "hello world",
+        try global_val.toZig([]const u8, &vm),
+    );
+}
+
+test "referenced child values are not garbage collected" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // Before GC
+    _ = try vm.evalStr(Val, "(defun magic-string () \"hello world\")");
+    const referenced_val = try vm.evalStr(Val, "(magic-string)");
+    try std.testing.expectFmt(
+        "\"hello world\"",
+        "{any}",
+        .{referenced_val.formatted(&vm)},
+    );
+
+    // After GC
+    try vm.runGc(&.{});
+    try std.testing.expectFmt(
+        "\"hello world\"",
+        "{any}",
+        .{referenced_val.formatted(&vm)},
+    );
 }

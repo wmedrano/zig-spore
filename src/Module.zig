@@ -56,7 +56,7 @@ pub fn registerFunction(self: *Module, vm: *Vm, func: *const NativeFunction) !vo
 /// defined or `error.ValueAlreadyDefined` is returned.
 pub fn registerValueByName(self: *Module, vm: *Vm, name: []const u8, value: Val) !void {
     const symbol = try Symbol.fromStr(name);
-    if (symbol.quotes != 0) return error.TooManyQuotes;
+    if (symbol.isQuoted()) return error.TooManyQuotes;
     const interned_symbol = try symbol.intern(vm);
     try self.registerValue(vm, interned_symbol, value);
 }
