@@ -10,6 +10,7 @@ const converters = @import("../converters.zig");
 
 pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, NativeFunction.withArgParser("function-bytecode", functionBytecodeFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser("apply", applyFn));
 }
 
 fn functionBytecodeFn(vm: *Vm, args: struct { func: Val }) Error!Val {
@@ -52,6 +53,15 @@ fn functionBytecodeFn(vm: *Vm, args: struct { func: Val }) Error!Val {
     return try Val.fromZig(vm, ret);
 }
 
+fn applyFn(vm: *Vm, args: struct { func: Val, args: []const Val }) Error!Val {
+    if (args.func.is(ByteCodeFunction)) {
+        const func = try args.func.toZig(ByteCodeFunction, vm);
+        return func.executeWith(vm, args.args);
+    }
+    const func = try args.func.toZig(*const NativeFunction, vm);
+    return func.executeWith(vm, args.args);
+}
+
 test "function-bytecode returns bytecode representation" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
@@ -62,5 +72,53 @@ test "function-bytecode returns bytecode representation" {
         "((get-local 0) (jump-if 2) (push (<void>)) (jump 2) (push 1) (ret) (deref bar) (eval 1))",
         "{any}",
         .{actual.formatted(&vm)},
+    );
+}
+
+test "apply can execute native functions" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectEqual(
+        6,
+        try vm.evalStr(i64, "(apply + (list 1 2 3))"),
+    );
+    try std.testing.expectEqual(
+        16,
+        try vm.evalStr(i64, "(+ 10 (apply + (list 1 2 3)))"),
+    );
+}
+
+test "apply can execute bytecode functions" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.evalStr(void, "(defun sum (x y z) (+ x y z))");
+    try std.testing.expectEqual(
+        6,
+        try vm.evalStr(i64, "(apply sum (list 1 2 3))"),
+    );
+    try std.testing.expectEqual(
+        16,
+        try vm.evalStr(i64, "(+ 10 (apply sum (list 1 2 3)))"),
+    );
+}
+
+test "apply can execute functions with no arguments" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // Native function.
+    try std.testing.expectEqual(0, try vm.evalStr(i64, "(apply + (list))"));
+
+    // Bytecode function.
+    try vm.evalStr(void, "(defun five () 5)");
+    try std.testing.expectEqual(5, try vm.evalStr(i64, "(apply five (list))"));
+}
+
+test "apply fails if not a function" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectError(
+        Error.WrongType,
+        vm.evalStr(Val, "(apply 1 (list 1 2 3))"),
     );
 }

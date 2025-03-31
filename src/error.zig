@@ -7,12 +7,10 @@ pub const Error = error{
     BadIf,
     BadWhen,
     ExpectedIdentifier,
-    /// An object (that is garbage collected) was not found. This may
-    /// happen if the object is referenced after it has been garbage
-    /// collected.
-    ObjectNotFound,
+    ExpectedFunction,
     StackFrameUnderflow,
     StackOverflow,
+    SymbolNotFound,
     ValueAlreadyDefined,
     WrongArity,
 } ||
@@ -22,6 +20,9 @@ pub const Error = error{
 
 pub const ToZigError = error{
     WrongType,
+    /// An object (that is garbage collected) was not found. This may
+    /// happen if the object is referenced after it has been garbage
+    /// collected.
     ObjectNotFound,
 };
 

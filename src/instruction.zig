@@ -31,7 +31,7 @@ pub const Instruction = union(InstructionTag) {
     }
 
     /// Execute an instruction on `vm`.
-    pub fn execute(self: Instruction, vm: *Vm) !?Val {
+    pub fn execute(self: Instruction, vm: *Vm) Error!?Val {
         switch (self) {
             .push => |val| {
                 try vm.stack.push(val);
@@ -61,7 +61,7 @@ pub const Instruction = union(InstructionTag) {
         }
     }
 
-    fn executeEval(vm: *Vm, n: u32) !void {
+    fn executeEval(vm: *Vm, n: u32) Error!void {
         if (n == 0) return Error.WrongArity;
         const function_idx = vm.stack.items.len - n;
         const stack_start = function_idx + 1;
@@ -79,7 +79,7 @@ pub const Instruction = union(InstructionTag) {
                 if (vm.options.log) {
                     std.log.err("Value {any} not callable.", .{function_val.formatted(vm)});
                 }
-                return error.ValueNotCallable;
+                return Error.ExpectedFunction;
             },
         }
     }
@@ -98,7 +98,7 @@ pub const Instruction = union(InstructionTag) {
                     std.log.err("Symbol {any} not found.\n", .{symbol.id});
                 }
             }
-            return error.SymbolNotFound;
+            return Error.SymbolNotFound;
         };
         try vm.stack.push(val);
     }

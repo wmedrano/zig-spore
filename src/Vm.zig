@@ -20,6 +20,7 @@ const std = @import("std");
 const AstBuilder = @import("AstBuilder.zig");
 const ByteCodeFunction = @import("ByteCodeFunction.zig");
 const Compiler = @import("Compiler.zig");
+const Error = @import("error.zig").Error;
 const Instruction = @import("instruction.zig").Instruction;
 const Module = @import("Module.zig");
 const Stack = @import("Stack.zig");
@@ -110,7 +111,7 @@ pub fn evalStr(self: *Vm, T: type, source: []const u8) !T {
             .next_instruction = 0,
         };
         try self.stack.frames.append(self.allocator(), stack_frame);
-        ret = try self.run();
+        ret = try self.runUnsafe();
     }
     return ret.toZig(T, self);
 }
@@ -124,9 +125,20 @@ pub fn runGc(self: *Vm, external: []const Val) !void {
     try self.objects.runGc(self, external);
 }
 
-fn run(self: *Vm) !Val {
+/// Run the virtual machine until:
+///
+/// * There are no more stack frames.
+/// * The current stack frame has been popped. Earlier stack frames
+///   will remain in tact.
+pub fn runUnsafe(self: *Vm) Error!Val {
+    const initial_stack_frames = self.stack.frames.items.len;
+    if (initial_stack_frames == 0) {
+        @setCold(true);
+        return Val.init();
+    }
     var return_value = Val.init();
-    while (self.nextInstruction()) |instruction| {
+    while (initial_stack_frames <= self.stack.frames.items.len) {
+        const instruction = self.nextInstruction();
         if (try instruction.execute(self)) |v| {
             return_value = v;
         }
@@ -134,8 +146,8 @@ fn run(self: *Vm) !Val {
     return return_value;
 }
 
-fn nextInstruction(self: Vm) ?Instruction {
-    const frame = if (self.stack.currentFrame()) |f| f else return null;
+fn nextInstruction(self: Vm) Instruction {
+    const frame = if (self.stack.currentFrame()) |f| f else return .{ .ret = {} };
     const is_ok = frame.next_instruction < frame.instructions.len;
     if (!is_ok) return .{ .ret = {} };
     const instruction = frame.instructions[frame.next_instruction];

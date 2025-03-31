@@ -68,9 +68,7 @@ pub const Marker = struct {
     /// being collected during the next garbage collector run.
     pub fn markReachable(self: Marker, val: Val) void {
         switch (val._repr) {
-            .void, .bool, .int, .float, .symbol, .key, .function => {
-                return;
-            },
+            .void, .bool, .int, .float, .symbol, .key, .function => {},
             .string => |id| self.object_manager.strings.markReachable(id, self),
             .list => |id| self.object_manager.lists.markReachable(id, self),
             .bytecode_function => |id| self.object_manager.bytecode_functions.markReachable(id, self),

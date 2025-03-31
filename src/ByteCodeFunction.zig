@@ -4,6 +4,7 @@ const Error = @import("error.zig").Error;
 const Instruction = @import("instruction.zig").Instruction;
 const ObjectManager = @import("ObjectManager.zig");
 const Stack = @import("Stack.zig");
+const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
 const ByteCodeFunction = @This();
@@ -41,8 +42,13 @@ pub fn markInstructions(instructions: []const Instruction, marker: ObjectManager
 /// Start the execution of `self` on `vm`.
 ///
 /// Note that `Vm` must run in order for the function to fully
-/// evaluate. `startExecute` only begins the execution.
-pub fn startExecute(self: ByteCodeFunction, vm: *Vm, stack_start: usize) !void {
+/// evaluate. To also run the `vm`, use
+/// `ByteCodeFunction.executeWith`.
+///
+/// # Warning
+/// `self` must not be garbage collected. Only run with functions that
+/// are reachable with the Vm to prevent premature garbage collection.
+pub fn startExecute(self: ByteCodeFunction, vm: *Vm, stack_start: usize) Error!void {
     const arg_count = vm.stack.items.len - stack_start;
     if (self.args != arg_count) return Error.WrongArity;
     try vm.stack.pushFrame(
@@ -52,4 +58,17 @@ pub fn startExecute(self: ByteCodeFunction, vm: *Vm, stack_start: usize) !void {
             .next_instruction = 0,
         },
     );
+}
+
+/// Execute `self` with the given args. The `vm` is run until
+/// execution of `self` is complete.
+///
+/// # Warning
+/// `self` must not be garbage collected. Only run with functions that
+/// are reachable with the Vm to prevent premature garbage collection.
+pub fn executeWith(self: ByteCodeFunction, vm: *Vm, args: []const Val) Error!Val {
+    const stack_start = vm.stack.items.len;
+    try vm.stack.pushMany(args);
+    try self.startExecute(vm, stack_start);
+    return vm.runUnsafe();
 }

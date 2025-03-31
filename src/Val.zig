@@ -325,6 +325,24 @@ pub fn formatted(self: Val, vm: *const Vm) FormattedVal {
     return FormattedVal{ .val = self, .vm = vm };
 }
 
+/// Execute `self` if `self` is a proper function.
+pub fn executeWith(self: Val, vm: *Vm, args: []const Val) Error!Val {
+    switch (self._repr) {
+        .function => |f| {
+            return f.executeWith(vm, args);
+        },
+        .bytecode_function => |id| {
+            const maybe_bytecode = vm.objects.get(ByteCodeFunction, id);
+            const bytecode = if (maybe_bytecode) |bc| bc else return Error.ObjectNotFound;
+            // Prevent garbage collection of `self`.
+            try vm.stack.push(self);
+            defer _ = vm.stack.pop();
+            return bytecode.executeWith(vm.objects.get(ByteCodeFunction, id));
+        },
+        else => return Error.ExpectedFunction,
+    }
+}
+
 test "null to Zig returns void" {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();

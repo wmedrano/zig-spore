@@ -1,14 +1,11 @@
 const std = @import("std");
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const lib = b.addStaticLibrary(.{
-        .name = "zig-spore",
+        .name = "spore",
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
@@ -28,8 +25,8 @@ pub fn build(b: *std.Build) void {
     // zig build docs
     const install_docs = b.addInstallDirectory(.{
         .source_dir = lib.getEmittedDocs(),
-        .install_dir = .prefix,
-        .install_subdir = "docs",
+        .install_dir = .{ .custom = "docs" },
+        .install_subdir = ".",
     });
     const docs_step = b.step("docs", "Install docs into zig-out/docs");
     docs_step.dependOn(&install_docs.step);
@@ -43,8 +40,8 @@ pub fn build(b: *std.Build) void {
     run_kcov.addArtifactArg(lib_unit_tests);
     const install_coverage = b.addInstallDirectory(.{
         .source_dir = kcov_out,
-        .install_dir = .prefix,
-        .install_subdir = "kcov",
+        .install_dir = .{ .custom = "kcov" },
+        .install_subdir = ".",
     });
     const kcov_step = b.step("kcov", "Generate test coverage report.");
     kcov_step.dependOn(&install_coverage.step);
@@ -53,14 +50,14 @@ pub fn build(b: *std.Build) void {
     const install_site_coverage = b.addInstallDirectory(
         .{
             .source_dir = install_coverage.options.source_dir,
-            .install_dir = .prefix,
-            .install_subdir = "site/kcov",
+            .install_dir = .{ .custom = "site" },
+            .install_subdir = "kcov",
         },
     );
     const install_site_docs = b.addInstallDirectory(.{
-        .source_dir = lib.getEmittedDocs(),
-        .install_dir = .prefix,
-        .install_subdir = "site",
+        .source_dir = install_docs.options.source_dir,
+        .install_dir = .{ .custom = "site" },
+        .install_subdir = ".",
     });
     const site_step = b.step("site", "Generate the Spore website.");
     site_step.dependOn(&install_site_coverage.step);
