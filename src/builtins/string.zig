@@ -1,10 +1,17 @@
 const std = @import("std");
 
-const Error = @import("../error.zig").Error;
 const AstBuilder = @import("../AstBuilder.zig");
+const Error = @import("../error.zig").Error;
+const NativeFunction = @import("../NativeFunction.zig");
 const Val = @import("../Val.zig");
 const Vm = @import("../Vm.zig");
 const converters = @import("../converters.zig");
+
+pub fn registerAll(vm: *Vm) !void {
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser("str-len", strLenFn));
+    try vm.global.registerFunction(vm, NativeFunction.init("str->sexps", strToSexpsFn));
+    try vm.global.registerFunction(vm, NativeFunction.init("str->sexp", strToSexpFn));
+}
 
 pub fn strLenFn(vm: *Vm, args: struct { str: []const u8 }) Error!Val {
     const len: i64 = @intCast(args.str.len);

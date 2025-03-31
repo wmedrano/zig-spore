@@ -32,15 +32,30 @@ pub fn internToId(self: *StringInterner, allocator: std.mem.Allocator, str: []co
     return interned.id;
 }
 
-pub fn intern(self: *StringInterner, allocator: std.mem.Allocator, str: []const u8) !struct { id: Id, str: []const u8 } {
-    if (self.string_to_id.get(str)) |id| {
-        return .{ .id = .{ .id = id }, .str = self.strings.items[id] };
-    }
+pub const StringWithId = struct {
+    id: Id,
+    str: []const u8,
+};
+
+pub fn intern(self: *StringInterner, allocator: std.mem.Allocator, str: []const u8) !StringWithId {
+    if (self.getInterned(str)) |id| return id;
     const owned_str = try allocator.dupe(u8, str);
     const id: u30 = @intCast(self.size());
     try self.strings.append(allocator, owned_str);
     try self.string_to_id.put(allocator, owned_str, id);
     return .{ .id = .{ .id = id }, .str = owned_str };
+}
+
+fn getInterned(self: StringInterner, str: []const u8) ?StringWithId {
+    if (self.string_to_id.get(str)) |id| {
+        return .{ .id = .{ .id = id }, .str = self.strings.items[id] };
+    }
+    return null;
+}
+
+pub fn getId(self: StringInterner, name: []const u8) ?Id {
+    if (self.getInterned(name)) |interned| return interned.id;
+    return null;
 }
 
 pub fn getString(self: StringInterner, id: Id) ?[]const u8 {

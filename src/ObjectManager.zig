@@ -268,7 +268,7 @@ test "garbage collector keeps global value" {
     );
 }
 
-test "referenced child values are not garbage collected" {
+test "referenced bytecode values are not garbage collected" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
 
@@ -285,6 +285,28 @@ test "referenced child values are not garbage collected" {
     try vm.runGc(&.{});
     try std.testing.expectFmt(
         "\"hello world\"",
+        "{any}",
+        .{referenced_val.formatted(&vm)},
+    );
+}
+
+test "referenced list values are not garbage collected" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // Before GC
+    _ = try vm.evalStr(Val, "(def magic-strings (list \"hello\" \"world\"))");
+    const referenced_val = vm.global.getValueByName(&vm, "magic-strings").?;
+    try std.testing.expectFmt(
+        "(\"hello\" \"world\")",
+        "{any}",
+        .{referenced_val.formatted(&vm)},
+    );
+
+    // After GC
+    try vm.runGc(&.{});
+    try std.testing.expectFmt(
+        "(\"hello\" \"world\")",
         "{any}",
         .{referenced_val.formatted(&vm)},
     );

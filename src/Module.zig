@@ -73,3 +73,15 @@ pub fn registerValue(self: *Module, vm: *Vm, symbol: Symbol.Interned, value: Val
 pub fn getValue(self: Module, symbol: Symbol.Interned) ?Val {
     return self.values.get(symbol);
 }
+
+/// Get a value from the module or `null` if it is not defined.
+pub fn getValueByName(self: Module, vm: *const Vm, name: []const u8) ?Val {
+    const symbol = Symbol.fromStr(name) catch return null;
+    if (symbol.isQuoted()) return null;
+    const interned_id = if (vm.objects.string_interner.getId(symbol.name())) |id| id else return null;
+    const interned_symbol: Symbol.Interned = .{
+        .quotes = 0,
+        .id = interned_id,
+    };
+    return self.getValue(interned_symbol);
+}

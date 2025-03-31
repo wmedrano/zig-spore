@@ -4,7 +4,7 @@ An embeddable Lisp for Zig.
 
 ## Links
 
-- [Zig Docs](https://wmedrano.github.io/zig-spore/docs/)
+- [Zig Docs](https://wmedrano.github.io/zig-spore/)
 - [Test Coverage](https://wmedrano.github.io/zig-spore/kcov/)
 
 ## Example

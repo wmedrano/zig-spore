@@ -1,9 +1,17 @@
 const std = @import("std");
 
-const Vm = @import("../Vm.zig");
-const Val = @import("../Val.zig");
 const Error = @import("../error.zig").Error;
+const NativeFunction = @import("../NativeFunction.zig");
+const Val = @import("../Val.zig");
+const Vm = @import("../Vm.zig");
 const converters = @import("../converters.zig");
+
+pub fn registerAll(vm: *Vm) !void {
+    try vm.global.registerFunction(vm, NativeFunction.init("+", plusFn));
+    try vm.global.registerFunction(vm, NativeFunction.init("-", minusFn));
+    try vm.global.registerFunction(vm, NativeFunction.init("<", lessFn));
+    try vm.global.registerFunction(vm, NativeFunction.init(">", greaterFn));
+}
 
 fn plusImpl(vm: *Vm, vals: []const Val) Error!Val {
     var int_sum: i64 = 0;
@@ -24,11 +32,11 @@ fn plusImpl(vm: *Vm, vals: []const Val) Error!Val {
     return Val.fromZig(vm, int_sum);
 }
 
-pub fn plusFn(vm: *Vm) Error!Val {
+fn plusFn(vm: *Vm) Error!Val {
     return plusImpl(vm, vm.stack.local());
 }
 
-pub fn minusFn(vm: *Vm) Error!Val {
+fn minusFn(vm: *Vm) Error!Val {
     const args = vm.stack.local();
     if (args.len == 0) return Error.WrongArity;
     if (args.len == 1) return negate(vm, args[0]);
@@ -48,7 +56,7 @@ fn negate(vm: *Vm, val: Val) Error!Val {
     }
 }
 
-pub fn lessFn(vm: *Vm) Error!Val {
+fn lessFn(vm: *Vm) Error!Val {
     const args = vm.stack.local();
     const arg_count = args.len;
     if (arg_count == 0) return Val.fromZig(vm, true);
@@ -80,7 +88,7 @@ pub fn lessFn(vm: *Vm) Error!Val {
     return Val.fromZig(vm, res);
 }
 
-pub fn greaterFn(vm: *Vm) Error!Val {
+fn greaterFn(vm: *Vm) Error!Val {
     const args = vm.stack.local();
     const arg_count = args.len;
     if (arg_count == 0) return Val.fromZig(vm, true);
@@ -169,4 +177,26 @@ test "- returns error if no arguments" {
         Error.WrongArity,
         vm.evalStr(Val, "(-)"),
     );
+}
+
+test "< returns true if less, false otherwise" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectEqual(true, try vm.evalStr(bool, "(< 1 2.2 3)"));
+    try std.testing.expectEqual(true, try vm.evalStr(bool, "(< 1)"));
+    try std.testing.expectEqual(false, try vm.evalStr(bool, "(< 1 2 3 2)"));
+    try std.testing.expectEqual(false, try vm.evalStr(bool, "(< 2 1)"));
+    try std.testing.expectEqual(false, try vm.evalStr(bool, "(< 1 1)"));
+}
+
+test "> returns true if greater, false otherwise" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectEqual(true, try vm.evalStr(bool, "(> 2 1 0)"));
+    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 2 1 1.1)"));
+    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 1 1.5 1.8 2)"));
+    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 1 1)"));
+    try std.testing.expectEqual(true, try vm.evalStr(bool, "(> 2.0 1.0)"));
+    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 1.0 2.0)"));
+    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 1.0 1.0)"));
 }
