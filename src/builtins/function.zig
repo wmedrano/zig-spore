@@ -55,11 +55,11 @@ fn functionBytecodeFn(vm: *Vm, args: struct { func: Val }) Error!Val {
 test "function-bytecode returns bytecode representation" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try vm.evalStr(void, "(defun foo (x) (+ x 42))");
+    try vm.evalStr(void, "(defun foo (x) (if x (return 1)) (bar))");
     const actual = try vm.evalStr(Val, "(function-bytecode foo)");
     try std.testing.expect(actual.is([]const Val));
     try std.testing.expectFmt(
-        "((deref +) (get-local 0) (push 42) (eval 3))",
+        "((get-local 0) (jump-if 2) (push (<void>)) (jump 2) (push 1) (ret) (deref bar) (eval 1))",
         "{any}",
         .{actual.formatted(&vm)},
     );

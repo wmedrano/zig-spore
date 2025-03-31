@@ -104,7 +104,12 @@ test "function call with wrong args returns error" {
 test "can eval recursive function" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try vm.evalStr(void, "(defun fib (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))");
+    try vm.evalStr(void,
+        \\ (defun fib (n)
+        \\   (if (< n 2) (return n))
+        \\   (+ (fib (- n 1))
+        \\      (fib (- n 2))))
+    );
     try std.testing.expectEqual(
         55,
         try vm.evalStr(i64, "(fib 10)"),

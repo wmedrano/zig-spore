@@ -17,6 +17,7 @@ function: Symbol.Interned,
 do: Symbol.Interned,
 @"if": Symbol.Interned,
 when: Symbol.Interned,
+@"return": Symbol.Interned,
 
 /// Creates a new macro expander.
 pub fn init(vm: *Vm) !MacroExpander {

@@ -134,6 +134,12 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
                 4 => return self.compileIf(nodes[1], nodes[2], nodes[3]),
                 else => return Error.BadIf,
             }
+        } else if (leading_symbol.eql(self.macro_expander.@"return")) {
+            switch (nodes.len) {
+                1 => return self.compileReturn(Val.init()),
+                2 => return self.compileReturn(nodes[1]),
+                else => return Error.BadArg,
+            }
         }
     }
     for (nodes) |node| {
@@ -143,6 +149,11 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
         self.allocator(),
         .{ .eval = @intCast(nodes.len) },
     );
+}
+
+fn compileReturn(self: *Compiler, expr: Val) Error!void {
+    try self.compileOne(expr);
+    try self.instructions.append(self.allocator(), .{ .ret = {} });
 }
 
 fn compileDefine(self: *Compiler, name: Val, expr: Val) Error!void {
