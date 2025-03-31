@@ -19,7 +19,7 @@ test "can make vm" {
 
 test "can run gc" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    try vm.runGc();
+    try vm.runGc(&.{});
     defer vm.deinit();
 }
 
@@ -110,17 +110,17 @@ test "can eval recursive function" {
     );
 }
 
-fn addTwoFn(vm: *Vm) Error!Val {
-    const args = vm.stack.local();
-    if (args.len != 1) return Error.WrongArity;
-    const arg = try args[0].toZig(i64, vm);
-    return Val.fromZig(vm, 2 + arg);
+fn addTwoFn(vm: *Vm, args: struct { num: i64 }) Error!Val {
+    return Val.fromZig(vm, 2 + args.num);
 }
 
 test "can eval custom fuction" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    try vm.global.registerFunction(&vm, NativeFunction.init("add-2", addTwoFn));
     defer vm.deinit();
+    try vm.global.registerFunction(
+        &vm,
+        NativeFunction.withArgParser("add-2", addTwoFn),
+    );
     try std.testing.expectEqual(
         10,
         try vm.evalStr(i64, "(add-2 8)"),

@@ -12,4 +12,4 @@ pub fn garbageCollect(self: *String, allocator: std.mem.Allocator) void {
     self.string = "";
 }
 
-pub fn markChildren(_: String, _: *ObjectManager) void {}
+pub fn markChildren(_: String, _: ObjectManager.Marker) void {}

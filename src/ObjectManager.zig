@@ -6,6 +6,7 @@ const ObjectManager = @This();
 const String = @import("String.zig");
 const StringInterner = @import("StringInterner.zig");
 const Val = @import("Val.zig");
+const Vm = @import("Vm.zig");
 
 string_interner: StringInterner = .{},
 strings: ObjectStorage(String) = .{},
@@ -13,6 +14,7 @@ lists: ObjectStorage(List) = .{},
 bytecode_functions: ObjectStorage(ByteCodeFunction) = .{},
 reachable_color: Color = Color.blue,
 
+/// Free all allocated objects.
 pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
     self.string_interner.deinit(allocator);
     self.strings.deinit(allocator);
@@ -20,6 +22,21 @@ pub fn deinit(self: *ObjectManager, allocator: std.mem.Allocator) void {
     self.bytecode_functions.deinit(allocator);
 }
 
+/// Run the garbage collector.
+pub fn runGc(self: *ObjectManager, vm: *Vm, external: []const Val) !void {
+    self.marker().markReachableMany(external);
+    self.marker().markReachableMany(vm.stack.items);
+    for (vm.stack.frames.items) |stack_frame| {
+        ByteCodeFunction.markInstructions(stack_frame.instructions, self.marker());
+    }
+    var globalsIter = vm.global.values.valueIterator();
+    while (globalsIter.next()) |v| {
+        self.marker().markReachable(v.*);
+    }
+    try self.sweepUnreachable(vm.allocator());
+}
+
+/// Store an object of type `T` and gets its `Id` handle.
 pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator, val: T) !Id(T) {
     var object_storage = switch (T) {
         String => &self.strings,
@@ -30,6 +47,8 @@ pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator,
     return object_storage.put(allocator, val, self.unreachableColor());
 }
 
+/// Get an object with the given `Id` handle or `null` if it is not
+/// found.
 pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
     const object_storage = switch (T) {
         String => self.strings,
@@ -40,22 +59,39 @@ pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
     return object_storage.get(id);
 }
 
-pub fn markReachable(self: *ObjectManager, val: Val) void {
-    switch (val._repr) {
-        .void => {},
-        .bool => {},
-        .int => {},
-        .float => {},
-        .string => |id| self.strings.markReachable(id, self),
-        .symbol => {},
-        .key => {},
-        .function => {},
-        .list => |id| self.lists.markReachable(id, self),
-        .bytecode_function => |id| self.bytecode_functions.markReachable(id, self),
+/// `Marker` is used to mark objects as being used.
+pub const Marker = struct {
+    object_manager: *ObjectManager,
+
+    /// Mark a single value as reachable. This prevents the `val` from
+    /// being collected during the next garbage collector run.
+    pub fn markReachable(self: Marker, val: Val) void {
+        switch (val._repr) {
+            .void => {},
+            .bool => {},
+            .int => {},
+            .float => {},
+            .string => |id| self.object_manager.strings.markReachable(id, self),
+            .symbol => {},
+            .key => {},
+            .function => {},
+            .list => |id| self.object_manager.lists.markReachable(id, self),
+            .bytecode_function => |id| self.object_manager.bytecode_functions.markReachable(id, self),
+        }
     }
+
+    /// Mark many values as reachable. Similar to `markReachable` but
+    /// takes many values at once.
+    pub fn markReachableMany(self: Marker, vals: []const Val) void {
+        for (vals) |v| self.markReachable(v);
+    }
+};
+
+fn marker(self: *ObjectManager) Marker {
+    return .{ .object_manager = self };
 }
 
-pub fn sweepUnreachable(self: *ObjectManager, allocator: std.mem.Allocator) !void {
+fn sweepUnreachable(self: *ObjectManager, allocator: std.mem.Allocator) !void {
     try self.strings.sweepColor(self.unreachableColor(), allocator);
     try self.lists.sweepColor(self.unreachableColor(), allocator);
     try self.bytecode_functions.sweepColor(self.unreachableColor(), allocator);
@@ -113,11 +149,11 @@ fn ObjectStorage(comptime T: type) type {
             return &self.objects.items[id.idx];
         }
 
-        pub fn markReachable(self: *Self, id: Id(T), objects: *ObjectManager) void {
-            if (self.color.items[id.idx] != objects.reachable_color) {
-                self.color.items[id.idx] = objects.reachable_color;
+        pub fn markReachable(self: *Self, id: Id(T), marker2: ObjectManager.Marker) void {
+            if (self.color.items[id.idx] != marker2.object_manager.reachable_color) {
+                self.color.items[id.idx] = marker2.object_manager.reachable_color;
                 if (self.get(id)) |v| {
-                    v.markChildren(objects);
+                    v.markChildren(marker2);
                 }
             }
         }

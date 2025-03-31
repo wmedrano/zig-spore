@@ -20,14 +20,14 @@ pub fn garbageCollect(self: *ByteCodeFunction, allocator: std.mem.Allocator) voi
     allocator.free(self.instructions);
 }
 
-pub fn markChildren(self: ByteCodeFunction, obj: *ObjectManager) void {
-    markInstructions(self.instructions, obj);
+pub fn markChildren(self: ByteCodeFunction, marker: ObjectManager.Marker) void {
+    markInstructions(self.instructions, marker);
 }
 
-pub fn markInstructions(instructions: []const Instruction, obj: *ObjectManager) void {
+pub fn markInstructions(instructions: []const Instruction, marker: ObjectManager.Marker) void {
     for (instructions) |instruction| {
         switch (instruction) {
-            .push => |v| obj.markReachable(v),
+            .push => |v| marker.markReachable(v),
             .eval => {},
             .get_local => {},
             .deref => {},

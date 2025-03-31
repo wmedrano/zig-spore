@@ -115,19 +115,11 @@ pub fn evalStr(self: *Vm, T: type, source: []const u8) !T {
 
 /// Run the garbage collector.
 ///
-/// This reduces memory usage by cleaning up unused allocated `Val`s.
-pub fn runGc(self: *Vm) !void {
-    for (self.stack.items) |v| {
-        self.objects.markReachable(v);
-    }
-    for (self.stack.frames.items) |stack_frame| {
-        ByteCodeFunction.markInstructions(stack_frame.instructions, &self.objects);
-    }
-    var globalsIter = self.global.values.valueIterator();
-    while (globalsIter.next()) |v| {
-        self.objects.markReachable(v.*);
-    }
-    try self.objects.sweepUnreachable(self.allocator());
+/// This reduces memory usage by cleaning up unused allocated
+/// `Val`s. Any values provided through `external` will also not be
+/// garbage collected.
+pub fn runGc(self: *Vm, external: []const Val) !void {
+    try self.objects.runGc(self, external);
 }
 
 fn run(self: *Vm) !Val {

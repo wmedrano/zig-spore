@@ -15,12 +15,11 @@ permissions:
   id-token: write
 
 # Allow only one concurrent deployment, skipping runs queued between
-# the run in-progress and latest queued.  However, do NOT cancel
-# in-progress runs as we want to allow these production deployments to
-# complete.
+# the run in-progress and latest queued.  Cancel in-progress runs as
+# we only need the latest run.
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-site:
@@ -32,12 +31,20 @@ jobs:
         uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.13.0
+      - name: Install KCov
+        # TODO: Do something less hacky.
+        run: |
+          curl -L https://github.com/SimonKagstrom/kcov/releases/download/v42/kcov-amd64.tar.gz --output kcov-amd64.tar.gz
+          sudo tar xf kcov-amd64.tar.gz -C /
+          cd /usr/lib/x86_64-linux-gnu/
+          sudo ln libopcodes-2.42-system.so libopcodes-2.38-system.so || echo libopcodes not found
+          sudo ln libbfd-2.42-system.so libbfd-2.38-system.so || echo libbfd not found
       - name: Build Docs
-        run: zig build docs --summary all --verbose
+        run: zig build site
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./zig-out/docs
+          path: ./zig-out/site
   deploy-site:
     environment:
       name: github-pages

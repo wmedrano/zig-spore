@@ -14,8 +14,6 @@ pub fn garbageCollect(self: *List, allocator: std.mem.Allocator) void {
     }
 }
 
-pub fn markChildren(self: List, obj: *ObjectManager) void {
-    for (self.list) |v| {
-        obj.markReachable(v);
-    }
+pub fn markChildren(self: List, marker: ObjectManager.Marker) void {
+    marker.markReachableMany(self.list);
 }

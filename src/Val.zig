@@ -4,16 +4,16 @@ const ByteCodeFunction = @import("ByteCodeFunction.zig");
 const Error = @import("error.zig").Error;
 const Instruction = @import("instruction.zig").Instruction;
 const List = @import("List.zig");
-const NativeFunction = @import("NativeFunction.zig");
 const ObjectManager = @import("ObjectManager.zig");
 const String = @import("String.zig");
 const StringInterner = @import("StringInterner.zig");
-const Symbol = @import("Symbol.zig");
 const ToZigError = @import("error.zig").ToZigError;
 const Vm = @import("Vm.zig");
 
 pub const FormattedVal = @import("FormattedVal.zig");
+pub const NativeFunction = @import("NativeFunction.zig");
 pub const Number = @import("number.zig").Number;
+pub const Symbol = @import("Symbol.zig");
 
 const Val = @This();
 
