@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const Error = @import("error.zig").Error;
-const NativeFunction = @import("NativeFunction.zig");
+const Error = @import("root.zig").Error;
+const NativeFunction = Val.NativeFunction;
 const StringInterner = @import("StringInterner.zig");
-const Symbol = @import("Symbol.zig");
+const Symbol = Val.Symbol;
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
@@ -23,22 +23,6 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
 ///
 /// - `vm` - The virtual machine for the module.
 /// - `func` - The `NativeFunction` to register.
-///
-/// ```zig
-/// fn addTwo(vm: *Vm, args: struct{ number: i64 }) Val.FunctionError!Val {
-///     return Val.fromZig(vm, 2 + args.number);
-/// }
-///
-/// test "can eval custom fuction" {
-///     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-///     defer vm.deinit();
-///     try vm.global.registerFunction(&vm, NativeFunction.withArgParser("add-2", addTwo));
-///     try std.testing.expectEqual(
-///         10,
-///         try vm.evalStr(i64, "(add-2 8)"),
-///     );
-/// }
-/// ```
 pub fn registerFunction(self: *Module, vm: *Vm, func: *const NativeFunction) !void {
     if (func.name.len == 0 or func.name[0] == '\'') return Error.ExpectedIdentifier;
     const interned_name = try vm.objects.string_interner.intern(vm.allocator(), func.name);
@@ -49,6 +33,23 @@ pub fn registerFunction(self: *Module, vm: *Vm, func: *const NativeFunction) !vo
         vm,
         .{ .quotes = 0, .id = interned_name.id },
         val,
+    );
+}
+
+fn addTwo(vm: *Vm, args: struct { number: i64 }) Error!Val {
+    return Val.fromZig(vm, 2 + args.number);
+}
+
+test registerFunction {
+    // fn addTwo(vm: *Vm, args: struct { number: i64 }) Error!Val {
+    //     return Val.fromZig(vm, 2 + args.number);
+    // }
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.global.registerFunction(&vm, NativeFunction.withArgParser("add-2", addTwo));
+    try std.testing.expectEqual(
+        10,
+        try vm.evalStr(i64, "(add-2 8)"),
     );
 }
 

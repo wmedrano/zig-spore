@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const ByteCodeFunction = @import("ByteCodeFunction.zig");
-const Error = @import("error.zig").Error;
+const ByteCodeFunction = Val.ByteCodeFunction;
+const Error = @import("root.zig").Error;
 const List = @import("List.zig");
 const ObjectManager = @This();
 const String = @import("String.zig");

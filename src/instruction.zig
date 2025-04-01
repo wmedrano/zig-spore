@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const ByteCodeFunction = @import("ByteCodeFunction.zig");
-const Error = @import("error.zig").Error;
-const Symbol = @import("Symbol.zig");
+const ByteCodeFunction = Val.ByteCodeFunction;
+const Error = @import("root.zig").Error;
+const Symbol = Val.Symbol;
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 

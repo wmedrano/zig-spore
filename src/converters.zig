@@ -1,16 +1,12 @@
 const std = @import("std");
 
-const Error = @import("error.zig").Error;
-const Symbol = @import("Symbol.zig");
+const Error = @import("root.zig").Error;
+const Symbol = Val.Symbol;
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");
 
 /// Create a struct where each field contains a `Symbol.Interned`
 /// corresponding to the name of that field.
-///
-/// ```zig
-/// const symbols = try symbolTable(&vm, struct{ good: Symbol.Interned, bad: Symbol.Interned });
-/// ```
 pub fn symbolTable(self: *Vm, T: type) !T {
     const type_info = @typeInfo(T);
     const struct_info = switch (type_info) {
@@ -32,6 +28,22 @@ pub fn symbolTable(self: *Vm, T: type) !T {
     return ret;
 }
 
+test symbolTable {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    const MySymbols = struct {
+        foo: Symbol.Interned,
+        bar: Symbol.Interned,
+    };
+    const symbols = try symbolTable(&vm, MySymbols);
+    try std.testing.expectEqualStrings("foo", symbols.foo.toSymbol(&vm).?.name());
+    try std.testing.expectEqualStrings("bar", symbols.bar.toSymbol(&vm).?.name());
+
+    try std.testing.expectFmt("foo", "{any}", .{symbols.foo.toVal().formatted(&vm)});
+    try std.testing.expectFmt("bar", "{any}", .{symbols.bar.toVal().formatted(&vm)});
+}
+
 /// Parse `vals` into a struct of type `T`. The `nth` value in `vals`
 /// is parsed into the `nth` field of `T`.
 ///
@@ -41,27 +53,6 @@ pub fn symbolTable(self: *Vm, T: type) !T {
 /// Returns `Error.WrongArity` if there are not enough `Val`s to fill
 /// the required fields of `T`, or if there are too many `Val`s and
 /// `T` does not have a `rest` field.
-///
-/// # Example
-/// Each `Val` will be parsed into the corresponding field using
-/// `Val.toZig`.
-///
-/// ```zig
-/// var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-/// defer vm.deinit();
-///
-/// const Args = struct {
-///     name: []const u8,
-///     age: i64,
-/// };
-/// const vals = [_]Val{
-///     try Val.fromZig(&vm, @as([]const u8, "ziggling")),
-///     try Val.fromZig(&vm, 12),
-/// };
-/// const args = try parseAsArgs(Args, &vm, &vals);
-/// try std.testing.expectEqualStrings(@as([]const u8, "ziggling"), args.name);
-/// try std.testing.expectEqual(12, args.age);
-/// ```
 ///
 /// # WARNING
 /// When `rest` is present, the remaining values are put into
@@ -91,49 +82,32 @@ pub fn parseAsArgs(
     return ret;
 }
 
-pub fn iter(T: type, vm: *const Vm, vals: []const Val) IterConverted(T) {
-    return .{ .vm = vm, .vals = vals, .idx = 0 };
-}
-
-pub fn IterConverted(T: type) type {
-    return struct {
-        vm: *const Vm,
-        vals: []const Val,
-        idx: usize,
-
-        pub fn next(self: *@This()) !?T {
-            if (self.idx >= self.vals.len) return null;
-            const v = self.vals[self.idx];
-            self.idx += 1;
-            return try v.toZig(T, self.vm);
-        }
-    };
-}
-
-test "can iterate over vals" {
+test parseAsArgs {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
 
-    const vals = [_]Val{
+    const Args = struct {
+        // The first argument.
+        a: i64,
+        // The second argument.
+        b: f64,
+        // Any other arguments. `rest` must be the last field and it
+        // must be of type `[]const Val`.
+        rest: []const Val,
+    };
+
+    const unparsed_args = [_]Val{
         try Val.fromZig(&vm, 1),
         try Val.fromZig(&vm, 2.0),
         try Val.fromZig(&vm, 3),
+        try Val.fromZig(&vm, @as([]const u8, "hello")),
     };
 
-    var numbers_iter = iter(Val.Number, &vm, &vals);
-    try std.testing.expectEqual(@as(Val.Number, .{ .int = 1 }), (try numbers_iter.next()).?);
-    try std.testing.expectEqual(@as(Val.Number, .{ .float = 2.0 }), (try numbers_iter.next()).?);
-    try std.testing.expectEqual(@as(Val.Number, .{ .int = 3 }), (try numbers_iter.next()).?);
-    try std.testing.expectEqual(null, try numbers_iter.next());
-}
-
-test "can iterate over empty vals" {
-    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    defer vm.deinit();
-
-    const vals: []const Val = &.{};
-    var numbers_iter = iter(Val.Number, &vm, vals);
-    try std.testing.expectEqual(null, try numbers_iter.next());
+    const args = try parseAsArgs(Args, &vm, &unparsed_args);
+    try std.testing.expectEqualDeep(
+        Args{ .a = 1, .b = 2.0, .rest = unparsed_args[2..] },
+        args,
+    );
 }
 
 test "parseAsArgs into struct" {
@@ -151,30 +125,6 @@ test "parseAsArgs into struct" {
     const args = try parseAsArgs(Args, &vm, &vals);
     try std.testing.expectEqualStrings(@as([]const u8, "ziggling"), args.name);
     try std.testing.expectEqual(12, args.age);
-}
-
-test "parseAsArgs with rest" {
-    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    defer vm.deinit();
-
-    const Args = struct {
-        a: i64,
-        b: f64,
-        rest: []const Val,
-    };
-
-    const vals = [_]Val{
-        try Val.fromZig(&vm, 1),
-        try Val.fromZig(&vm, 2.0),
-        try Val.fromZig(&vm, 3),
-        try Val.fromZig(&vm, @as([]const u8, "hello")),
-    };
-
-    const args = try parseAsArgs(Args, &vm, &vals);
-    try std.testing.expectEqualDeep(
-        Args{ .a = 1, .b = 2.0, .rest = vals[2..] },
-        args,
-    );
 }
 
 test "parseAsArgs with too few arguments" {
@@ -212,4 +162,49 @@ test "parseAsArgs with too few many arguments and no rest" {
         Error.WrongArity,
         parseAsArgs(Args, &vm, &vals),
     );
+}
+
+pub fn iter(T: type, vm: *const Vm, vals: []const Val) IterConverted(T) {
+    return .{ .vm = vm, .vals = vals, .idx = 0 };
+}
+
+pub fn IterConverted(T: type) type {
+    return struct {
+        vm: *const Vm,
+        vals: []const Val,
+        idx: usize,
+
+        pub fn next(self: *@This()) !?T {
+            if (self.idx >= self.vals.len) return null;
+            const v = self.vals[self.idx];
+            self.idx += 1;
+            return try v.toZig(T, self.vm);
+        }
+    };
+}
+
+test iter {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    const vals = [_]Val{
+        try Val.fromZig(&vm, 1),
+        try Val.fromZig(&vm, 2.0),
+        try Val.fromZig(&vm, 3),
+    };
+
+    var numbers_iter = iter(Val.Number, &vm, &vals);
+    try std.testing.expectEqual(Val.Number{ .int = 1 }, (try numbers_iter.next()).?);
+    try std.testing.expectEqual(Val.Number{ .float = 2.0 }, (try numbers_iter.next()).?);
+    try std.testing.expectEqual(Val.Number{ .int = 3 }, (try numbers_iter.next()).?);
+    try std.testing.expectEqual(null, try numbers_iter.next());
+}
+
+test "can iterate over empty vals" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    const vals: []const Val = &.{};
+    var numbers_iter = iter(Val.Number, &vm, vals);
+    try std.testing.expectEqual(null, try numbers_iter.next());
 }

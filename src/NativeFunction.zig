@@ -4,7 +4,7 @@
 //! Note: All members should live for the lifetime of the `Vm`.
 const std = @import("std");
 
-const Error = @import("error.zig").Error;
+const Error = @import("root.zig").Error;
 const Stack = @import("Stack.zig");
 const Val = @import("Val.zig");
 const Vm = @import("Vm.zig");

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Error = @import("error.zig").Error;
+const Error = @import("root.zig").Error;
 const Instruction = @import("instruction.zig").Instruction;
 const ObjectManager = @import("ObjectManager.zig");
 const Stack = @import("Stack.zig");

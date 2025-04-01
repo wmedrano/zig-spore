@@ -3,15 +3,14 @@
 //! The bulk of the work is done by the `Vm` struct and functions like
 //! `Vm.evalStr` and `Vm.runGc`.
 const std = @import("std");
+pub const Vm = @import("Vm.zig");
 
-const ByteCodeFunction = @import("ByteCodeFunction.zig");
-const NativeFunction = @import("NativeFunction.zig");
-const Symbol = @import("Symbol.zig");
+const ByteCodeFunction = Val.ByteCodeFunction;
+const NativeFunction = Val.NativeFunction;
+const Symbol = Val.Symbol;
 
 pub const Error = @import("error.zig").Error;
-pub const Module = @import("Module.zig");
-pub const Val = @import("Val.zig");
-pub const Vm = @import("Vm.zig");
+pub const Val = Vm.Val;
 
 test "can make vm" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });

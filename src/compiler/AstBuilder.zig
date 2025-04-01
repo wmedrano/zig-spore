@@ -1,10 +1,11 @@
 const std = @import("std");
+const root = @import("../root.zig");
 
-const AstError = @import("error.zig").AstError;
-const Symbol = @import("Symbol.zig");
+const AstError = @import("../error.zig").AstError;
+const Symbol = Val.Symbol;
 const Tokenizer = @import("Tokenizer.zig");
-const Val = @import("Val.zig");
-const Vm = @import("Vm.zig");
+const Val = Vm.Val;
+const Vm = root.Vm;
 
 const AstBuilder = @This();
 

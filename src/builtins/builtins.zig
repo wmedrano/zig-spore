@@ -1,16 +1,18 @@
 const std = @import("std");
+const root = @import("../root.zig");
 
-const ByteCodeFunction = @import("ByteCodeFunction.zig");
-const Error = @import("error.zig").Error;
-const NativeFunction = @import("NativeFunction.zig");
-const Symbol = @import("Symbol.zig");
-const Val = @import("Val.zig");
-const Vm = @import("Vm.zig");
-const converters = @import("converters.zig");
-const function = @import("builtins/function.zig");
-const math = @import("builtins/math.zig");
-const string = @import("builtins/string.zig");
+const ByteCodeFunction = Val.ByteCodeFunction;
+const Error = root.Error;
+const NativeFunction = Val.NativeFunction;
+const Symbol = Val.Symbol;
+const Val = root.Val;
+const Vm = root.Vm;
+const converters = @import("../converters.zig");
+const function = @import("function.zig");
+const math = @import("math.zig");
+const string = @import("string.zig");
 
+/// Registers all built-in functions and values into the given virtual machine.
 pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, NativeFunction.withArgParser("%define", defineFn));
     try vm.global.registerFunction(vm, NativeFunction.withArgParser("do", doFn));
@@ -18,6 +20,21 @@ pub fn registerAll(vm: *Vm) !void {
     try math.registerAll(vm);
     try string.registerAll(vm);
     try function.registerAll(vm);
+}
+
+test registerAll {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // Check that some basic functions are registered.
+    try std.testing.expect(vm.global.getValueByName(&vm, "+") != null);
+    try std.testing.expect(vm.global.getValueByName(&vm, "str-len") != null);
+    try std.testing.expect(vm.global.getValueByName(&vm, "list") != null);
+
+    // Verify that a simple expression can be evaluated using the builtins.
+    _ = try vm.evalStr(Val, "(def my-const 3)");
+    const val = try vm.evalStr(Val, "(list (do 'ignore (+ 3 3)))");
+    try std.testing.expectFmt("(6)", "{any}", .{val.formatted(&vm)});
 }
 
 fn defineFn(vm: *Vm, args: struct { symbol: Symbol.Interned, value: Val }) Error!Val {

@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const AstBuilder = @import("../AstBuilder.zig");
+const AstBuilder = @import("../compiler/AstBuilder.zig");
 const Error = @import("../error.zig").Error;
-const NativeFunction = @import("../NativeFunction.zig");
-const Val = @import("../Val.zig");
+const NativeFunction = Val.NativeFunction;
+const Val = Vm.Val;
 const Vm = @import("../Vm.zig");
 const converters = @import("../converters.zig");
 
@@ -60,6 +60,21 @@ test "str->sexp produces s-expression" {
         "(+ 1 (foo 2 3 :key ''quoted))",
         "{any}",
         .{actual.formatted(&vm)},
+    );
+}
+
+test "str->sexp on empty string produces void" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.evalStr(void, "(str->sexp \"\")");
+}
+
+test "str->sexp with multiple sexps returns error" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectError(
+        Error.BadArg,
+        vm.evalStr(Val, "(str->sexp \"(+ 1 2) (+ 3 4)\")"),
     );
 }
 

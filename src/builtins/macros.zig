@@ -1,12 +1,13 @@
 const std = @import("std");
+const root = @import("../root.zig");
 
 const Allocator = std.mem.Allocator;
-const Error = @import("error.zig").Error;
-const Instruction = @import("instruction.zig").Instruction;
-const Symbol = @import("Symbol.zig");
-const Val = @import("Val.zig");
-const Vm = @import("Vm.zig");
-const converters = @import("converters.zig");
+const Error = root.Error;
+const Instruction = @import("../instruction.zig").Instruction;
+const Symbol = Val.Symbol;
+const Val = Vm.Val;
+const Vm = root.Vm;
+const converters = @import("../converters.zig");
 
 pub fn defMacro(vm: *Vm) Error!Val {
     const expr = vm.stack.local();

@@ -2,33 +2,20 @@
 //!
 //! `Vm.evalStr` can be used to evaluate code. To register values, see
 //! methods like `Module.registerValue` and `Module.registerFunction`.
-//!
-//! # Example
-//!
-//! ```zig
-//! test "can evaluate code" {
-//!     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-//!     defer vm.deinit();
-//!     try std.testing.expectEqual(
-//!         42,
-//!         try vm.evalStr(i64, "(+ 20 20 2)"),
-//!     );
-//! }
-//! ```
 const std = @import("std");
 
-const AstBuilder = @import("AstBuilder.zig");
-const ByteCodeFunction = @import("ByteCodeFunction.zig");
-const Compiler = @import("Compiler.zig");
-const Error = @import("error.zig").Error;
+const AstBuilder = @import("compiler/AstBuilder.zig");
+const ByteCodeFunction = Val.ByteCodeFunction;
+const Compiler = @import("compiler/Compiler.zig");
+const Error = @import("root.zig").Error;
 const Instruction = @import("instruction.zig").Instruction;
-const Module = @import("Module.zig");
-const Stack = @import("Stack.zig");
-const Symbol = @import("Symbol.zig");
-const Val = @import("Val.zig");
-const builtins = @import("builtins.zig");
-
 const ObjectManager = @import("ObjectManager.zig");
+const Stack = @import("Stack.zig");
+const Symbol = Val.Symbol;
+const builtins = @import("builtins/builtins.zig");
+
+pub const Module = @import("Module.zig");
+pub const Val = @import("Val.zig");
 
 const Vm = @This();
 
@@ -52,7 +39,7 @@ stack: Stack,
 pub const Options = struct {
     /// If logging should be enabled. This is useful for printing out
     /// more information on errors.
-    log: bool = false,
+    log: bool = true,
 
     /// The allocator to use. All objects on the `Vm` will use this
     /// allocator.
@@ -72,6 +59,21 @@ pub fn init(options: Options) !Vm {
     };
     try builtins.registerAll(&vm);
     return vm;
+}
+
+test init {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.evalStr(void,
+        \\ (defun fib (n)
+        \\   (if (< n 2) (return n))
+        \\   (+ (fib (- n 1))
+        \\      (fib (- n 2))))
+    );
+    try std.testing.expectEqual(
+        55,
+        try vm.evalStr(i64, "(fib 10)"),
+    );
 }
 
 /// Release all allocated memory.
@@ -116,6 +118,25 @@ pub fn evalStr(self: *Vm, T: type, source: []const u8) !T {
     return ret.toZig(T, self);
 }
 
+test evalStr {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    try vm.evalStr(void,
+        \\ (defun fib (n)
+        \\   (if (< n 2) (return n))
+        \\   (+ (fib (- n 1))
+        \\      (fib (- n 2))))
+    );
+    try std.testing.expectEqual(
+        55,
+        try vm.evalStr(i64, "(fib 10)"),
+    );
+
+    const val = try vm.evalStr(Val, "(+ 2 2)");
+    try std.testing.expectFmt("4", "{any}", .{val.formatted(&vm)});
+}
+
 /// Run the garbage collector.
 ///
 /// This reduces memory usage by cleaning up unused allocated
@@ -125,7 +146,23 @@ pub fn runGc(self: *Vm, external: []const Val) !void {
     try self.objects.runGc(self, external);
 }
 
-/// Run the virtual machine until:
+test runGc {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // .. do stuff
+    const keep_me = try vm.evalStr(Val, "(list 1 2 3 4)");
+    const dont_keep_me = try vm.evalStr(Val, "(list 5 6 7 8)");
+
+    // Free unused memory.
+    try vm.runGc(&.{keep_me});
+
+    try std.testing.expectFmt("(1 2 3 4)", "{any}", .{keep_me.formatted(&vm)});
+    try std.testing.expectFmt("(<invalid-list>)", "{any}", .{dont_keep_me.formatted(&vm)});
+}
+
+/// Run the virtual machine until some condition is met. You probably
+/// mean to use something like `Vm.evalStr` instead.
 ///
 /// * There are no more stack frames.
 /// * The current stack frame has been popped. Earlier stack frames

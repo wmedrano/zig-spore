@@ -1,15 +1,16 @@
 const std = @import("std");
+const root = @import("../root.zig");
 
 const Allocator = std.mem.Allocator;
-const ByteCodeFunction = @import("ByteCodeFunction.zig");
-const Error = @import("error.zig").Error;
-const Instruction = @import("instruction.zig").Instruction;
+const ByteCodeFunction = Val.ByteCodeFunction;
+const Error = root.Error;
+const Instruction = @import("../instruction.zig").Instruction;
 const MacroExpander = @import("MacroExpander.zig");
-const Symbol = @import("Symbol.zig");
-const Val = @import("Val.zig");
-const Vm = @import("Vm.zig");
-const builtin_macros = @import("builtin_macros.zig");
-const converters = @import("converters.zig");
+const Symbol = Val.Symbol;
+const Val = Vm.Val;
+const Vm = root.Vm;
+const builtin_macros = @import("../builtins/macros.zig");
+const converters = @import("../converters.zig");
 
 const Compiler = @This();
 
