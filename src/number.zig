@@ -5,7 +5,7 @@ pub const Number = union(enum) {
     float: f64,
 
     pub fn toVal(self: Number) Val {
-        const val = Val.fromZig(void, self) catch unreachable;
+        const val = Val.from(void, self) catch unreachable;
         return val;
     }
 };

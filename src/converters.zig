@@ -55,9 +55,9 @@ test symbolTable {
 /// `T` does not have a `rest` field.
 ///
 /// # WARNING
-/// When `rest` is present, the remaining values are put into
-/// the final field, reguardless if it is `rest` or not. TODO: Add
-/// compile check to assert that `rest` is the final field.
+/// When `rest` is present, the remaining values are put into the
+/// final field, regardless if it is `rest` or not. TODO: Add compile
+/// check to assert that `rest` is the final field.
 pub fn parseAsArgs(
     T: type,
     vm: *Vm,
@@ -77,7 +77,7 @@ pub fn parseAsArgs(
         if (has_rest and idx == struct_info.fields.len - 1)
             @field(ret, field.name) = vals[idx..]
         else
-            @field(ret, field.name) = try vals[idx].toZig(field.type, vm);
+            @field(ret, field.name) = try vals[idx].to(field.type, vm);
     }
     return ret;
 }
@@ -97,10 +97,10 @@ test parseAsArgs {
     };
 
     const unparsed_args = [_]Val{
-        try Val.fromZig(&vm, 1),
-        try Val.fromZig(&vm, 2.0),
-        try Val.fromZig(&vm, 3),
-        try Val.fromZig(&vm, @as([]const u8, "hello")),
+        try Val.from(&vm, 1),
+        try Val.from(&vm, 2.0),
+        try Val.from(&vm, 3),
+        try Val.from(&vm, @as([]const u8, "hello")),
     };
 
     const args = try parseAsArgs(Args, &vm, &unparsed_args);
@@ -119,8 +119,8 @@ test "parseAsArgs into struct" {
         age: i64,
     };
     const vals = [_]Val{
-        try Val.fromZig(&vm, @as([]const u8, "ziggling")),
-        try Val.fromZig(&vm, 12),
+        try Val.from(&vm, @as([]const u8, "ziggling")),
+        try Val.from(&vm, 12),
     };
     const args = try parseAsArgs(Args, &vm, &vals);
     try std.testing.expectEqualStrings(@as([]const u8, "ziggling"), args.name);
@@ -136,7 +136,7 @@ test "parseAsArgs with too few arguments" {
         b: f64,
     };
 
-    const vals = [_]Val{try Val.fromZig(&vm, 1)};
+    const vals = [_]Val{try Val.from(&vm, 1)};
     try std.testing.expectError(
         Error.WrongArity,
         parseAsArgs(Args, &vm, &vals),
@@ -153,10 +153,10 @@ test "parseAsArgs with too few many arguments and no rest" {
     };
 
     const vals = [_]Val{
-        try Val.fromZig(&vm, 1),
-        try Val.fromZig(&vm, 1),
-        try Val.fromZig(&vm, 1),
-        try Val.fromZig(&vm, 1),
+        try Val.from(&vm, 1),
+        try Val.from(&vm, 1),
+        try Val.from(&vm, 1),
+        try Val.from(&vm, 1),
     };
     try std.testing.expectError(
         Error.WrongArity,
@@ -178,7 +178,7 @@ pub fn IterConverted(T: type) type {
             if (self.idx >= self.vals.len) return null;
             const v = self.vals[self.idx];
             self.idx += 1;
-            return try v.toZig(T, self.vm);
+            return try v.to(T, self.vm);
         }
     };
 }
@@ -188,9 +188,9 @@ test iter {
     defer vm.deinit();
 
     const vals = [_]Val{
-        try Val.fromZig(&vm, 1),
-        try Val.fromZig(&vm, 2.0),
-        try Val.fromZig(&vm, 3),
+        try Val.from(&vm, 1),
+        try Val.from(&vm, 2.0),
+        try Val.from(&vm, 3),
     };
 
     var numbers_iter = iter(Val.Number, &vm, &vals);

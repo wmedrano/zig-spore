@@ -17,8 +17,8 @@ pub const Symbol = @import("Symbol.zig");
 
 const Val = @This();
 
-/// The data inside the value. Prefer to use `fromZig` to construct a
-/// new `Val` or `toZig` to extract from a `Val` when possible.
+/// The data inside the value. Prefer to use `from` to construct a
+/// new `Val` or `to` to extract from a `Val` when possible.
 _repr: ValRepr,
 
 pub const ValTag = enum {
@@ -61,7 +61,7 @@ test init {
     try std.testing.expect(val.is(void));
     try std.testing.expectEqualDeep(
         {},
-        try vm.evalStr(void, "void-val"),
+        try vm.to(void, try vm.evalStr("void-val")),
     );
 }
 
@@ -81,13 +81,13 @@ test init {
 /// - `Symbol.Interned` - Converts to a `Val.symbol`.
 /// - `[]const Val` or `[]Val` - Converts to a `Val.list`.
 /// - `?T` where T is supported - Converts to `T` or `void` if `T` is null.
-pub fn fromZig(vm: *Vm, val: anytype) !Val {
+pub fn from(vm: *Vm, val: anytype) !Val {
     const T = @TypeOf(val);
     const type_info = @typeInfo(T);
     switch (type_info) {
         .Optional => {
             if (val) |v| {
-                return fromZig(vm, v);
+                return from(vm, v);
             }
             return init();
         },
@@ -128,45 +128,46 @@ pub fn fromZig(vm: *Vm, val: anytype) !Val {
             return fromOwnedList(vm, owned_list);
         },
         else => @compileError(
-            "fromZig not supported for type " ++ @typeName(T) ++ ".",
+            "from not supported for type " ++ @typeName(T) ++ ".",
         ),
     }
 }
 
-test fromZig {
+test from {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
 
+    // Create a int val.
     try vm.global.registerValueByName(
         &vm,
         "magic-number",
-        try Val.fromZig(&vm, 42),
+        try Val.from(&vm, 42),
     );
     try std.testing.expectEqualDeep(
         Val.Number{ .int = 43 },
-        try vm.evalStr(Val.Number, "(+ magic-number 1)"),
+        try vm.to(Val.Number, try vm.evalStr("(+ magic-number 1)")),
     );
 
-    // `*const Vm` type.
+    // Create a string val.
     try vm.global.registerValueByName(
         &vm,
         "magic-string",
-        try Val.fromZig(&vm, @as([]const u8, "my-string")),
+        try Val.from(&vm, @as([]const u8, "my-string")),
     );
     try std.testing.expectEqualStrings(
         "my-string",
-        try vm.evalStr([]const u8, "magic-string"),
+        try vm.to([]const u8, try vm.evalStr("magic-string")),
     );
 
-    // Optional type.
+    // Create an optional type.
     const optional_val: ?i64 = null;
     try vm.global.registerValueByName(
         &vm,
         "optional-val",
-        try Val.fromZig(&vm, optional_val),
+        try Val.from(&vm, optional_val),
     );
-    try std.testing.expectEqualDeep({}, try vm.evalStr(void, "optional-val"));
-    try std.testing.expectEqualDeep(null, try vm.evalStr(?i64, "optional-val"));
+    try std.testing.expectEqualDeep({}, try vm.to(void, try vm.evalStr("optional-val")));
+    try std.testing.expectEqualDeep(null, try vm.to(?i64, try vm.evalStr("optional-val")));
 }
 
 /// Convert from a Spore `Val` to a Zig value of type `T`.
@@ -193,11 +194,11 @@ test fromZig {
 /// For slice types (`[]const u8`, `[]const Val`), the returned slice's
 /// lifetime is tied to the underlying object in the Vm's ObjectManager.
 /// The caller must ensure the Vm and its objects outlive the use of the slice.
-pub fn toZig(self: Val, comptime T: type, vm: anytype) ToZigError!T {
+pub fn to(self: Val, comptime T: type, vm: anytype) ToZigError!T {
     const VmType = @TypeOf(vm);
     if (VmType != *const Vm and VmType != *Vm and VmType != void) {
         @compileError(
-            "`vm` argument to `toZig` must be a `*const Vm` or `void` but got `" ++
+            "`vm` argument to `to` must be a `*const Vm` or `void` but got `" ++
                 @typeName(VmType) ++ "`.",
         );
     }
@@ -231,21 +232,21 @@ pub fn toZig(self: Val, comptime T: type, vm: anytype) ToZigError!T {
     }
 }
 
-test toZig {
+test to {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
 
-    const number = try vm.evalStr(Val, "100");
-    try std.testing.expectEqualDeep(100, try number.toZig(i64, &vm));
-    try std.testing.expectEqualDeep(Val.Number{ .int = 100 }, try number.toZig(Val.Number, &vm));
+    const number = try vm.evalStr("100");
+    try std.testing.expectEqualDeep(100, try number.to(i64, &vm));
+    try std.testing.expectEqualDeep(Val.Number{ .int = 100 }, try number.to(Val.Number, &vm));
 
-    const str = try vm.evalStr(Val, @as([]const u8, "\"string\""));
-    try std.testing.expectEqualStrings("string", try str.toZig([]const u8, &vm));
+    const str = try vm.evalStr("\"string\"");
+    try std.testing.expectEqualStrings("string", try str.to([]const u8, &vm));
 }
 
 /// Returns `true` if `self` can be converted into `T`.
 ///
-/// The actual conversion can be done with `toZig`.
+/// The actual conversion can be done with `to`.
 pub fn is(self: Val, comptime T: type) bool {
     if (T == Val) return true;
     switch (self._repr) {
@@ -274,18 +275,18 @@ test is {
 
     try std.testing.expect(Val.init().is(void));
 
-    const string_val = try vm.evalStr(Val, "\"my-string\"");
+    const string_val = try vm.evalStr("\"my-string\"");
     try std.testing.expect(string_val.is([]const u8));
 
-    const int_val = try vm.evalStr(Val, "4");
+    const int_val = try vm.evalStr("4");
     try std.testing.expect(int_val.is(i64));
     try std.testing.expect(int_val.is(Val.Number));
 
-    const float_val = try vm.evalStr(Val, "4.0");
+    const float_val = try vm.evalStr("4.0");
     try std.testing.expect(float_val.is(f64));
     try std.testing.expect(float_val.is(Val.Number));
 
-    const list_val = try vm.evalStr(Val, "(list 1 2 3)");
+    const list_val = try vm.evalStr("(list 1 2 3)");
     try std.testing.expect(list_val.is([]const Val));
 }
 
@@ -397,7 +398,7 @@ test formatted {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
 
-    const val = try vm.evalStr(Val, "(list 1 2 3 4)");
+    const val = try vm.evalStr("(list 1 2 3 4)");
     try std.testing.expectFmt("(1 2 3 4)", "{any}", .{val.formatted(&vm)});
 }
 
@@ -423,10 +424,10 @@ test executeWith {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
 
-    const func = try vm.evalStr(Val, "(function (a b) (+ a b))");
-    const args = [_]Val{ try Val.fromZig(&vm, 1), try Val.fromZig(&vm, 2) };
+    const func = try vm.evalStr("(function (a b) (+ a b))");
+    const args = [_]Val{ try Val.from(&vm, 1), try Val.from(&vm, 2) };
     const res = try func.executeWith(&vm, &args);
-    try std.testing.expectEqual(3, res.toZig(i64, {}));
+    try std.testing.expectEqual(3, try res.to(i64, {}));
 }
 
 test "null to Zig returns void" {
@@ -438,11 +439,11 @@ test "null to Zig returns void" {
 
     try std.testing.expectEqual(
         Val.init(),
-        try Val.fromZig(&vm, null_value),
+        try Val.from(&vm, null_value),
     );
     try std.testing.expectEqual(
-        Val.fromZig(&vm, 10),
-        try Val.fromZig(&vm, not_null_value),
+        Val.from(&vm, 10),
+        try Val.from(&vm, not_null_value),
     );
 }
 

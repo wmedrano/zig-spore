@@ -1,5 +1,5 @@
 //! Defines `NativeFunction`, which allows Zig functions to be called
-//from within a `Vm`.
+//! from within a `Vm`.
 //!
 //! Note: All members should live for the lifetime of the `Vm`.
 const std = @import("std");
@@ -29,8 +29,8 @@ function: *const fn (*Vm) Error!Val,
 /// pub fn addTwo(vm: *Vm) Error!Val {
 ///     const args = vm.stack.local();
 ///     if (args.len != 1) return Error.WrongArity;
-///     const arg = try args[0].toZig(i64, vm);
-///     return Val.fromZig(vm, 2 + arg);
+///     const arg = try args[0].to(i64, vm);
+///     return Val.from(vm, 2 + arg);
 /// }
 /// const my_func = NativeFunction.init("add-2", addTwo);
 /// ```
@@ -54,7 +54,7 @@ pub fn init(comptime func_name: []const u8, comptime func: *const fn (*Vm) Error
 ///
 /// ```zig
 /// pub fn addTwoInts(vm: *Vm, args: struct{a: i64, b: i64}) Error!Val {
-///     return Val.fromZig(vm, args.a + args.b);
+///     return Val.from(vm, args.a + args.b);
 /// }
 /// const my_func = NativeFunction.withArgParser("add-2-ints", addTwoInts);
 /// ```

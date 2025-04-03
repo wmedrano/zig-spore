@@ -26,25 +26,25 @@ pub fn format(
         .int => |x| try writer.print("{any}", .{x}),
         .float => |x| try writer.print("{any}", .{x}),
         .string => {
-            const string = self.val.toZig([]const u8, self.vm) catch {
+            const string = self.val.to([]const u8, self.vm) catch {
                 return writer.print("(<invalid-string>)", .{});
             };
             try writer.print("\"{s}\"", .{string});
         },
         .symbol => {
-            const symbol = self.val.toZig(Symbol, self.vm) catch {
+            const symbol = self.val.to(Symbol, self.vm) catch {
                 return writer.print("(<invalid-symbol>)", .{});
             };
             try writer.print("{any}", .{symbol});
         },
         .key => {
-            const key = self.val.toZig(Symbol.Key, self.vm) catch {
+            const key = self.val.to(Symbol.Key, self.vm) catch {
                 return writer.print("(<invalid-key>)", .{});
             };
             try writer.print("{any}", .{key});
         },
         .list => {
-            const list = self.val.toZig([]const Val, self.vm) catch {
+            const list = self.val.to([]const Val, self.vm) catch {
                 return writer.print("(<invalid-list>)", .{});
             };
             try writer.print("(", .{});
@@ -85,12 +85,12 @@ test "bool" {
     try std.testing.expectFmt(
         "true",
         "{any}",
-        .{(try Val.fromZig(&vm, true)).formatted(&vm)},
+        .{(try Val.from(&vm, true)).formatted(&vm)},
     );
     try std.testing.expectFmt(
         "false",
         "{any}",
-        .{(try Val.fromZig(&vm, false)).formatted(&vm)},
+        .{(try Val.from(&vm, false)).formatted(&vm)},
     );
 }
 
@@ -100,7 +100,7 @@ test "int" {
     try std.testing.expectFmt(
         "123",
         "{any}",
-        .{(try Val.fromZig(&vm, 123)).formatted(&vm)},
+        .{(try Val.from(&vm, 123)).formatted(&vm)},
     );
 }
 
@@ -110,19 +110,19 @@ test "float" {
     try std.testing.expectFmt(
         "1.5e0",
         "{any}",
-        .{(try Val.fromZig(&vm, 1.5)).formatted(&vm)},
+        .{(try Val.from(&vm, 1.5)).formatted(&vm)},
     );
     try std.testing.expectFmt(
         "1.2345e3",
         "{any}",
-        .{(try Val.fromZig(&vm, 1234.5)).formatted(&vm)},
+        .{(try Val.from(&vm, 1234.5)).formatted(&vm)},
     );
 }
 
 test "string" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    const val = try Val.fromZig(&vm, @as([]const u8, "hello world"));
+    const val = try Val.from(&vm, @as([]const u8, "hello world"));
     try std.testing.expectFmt(
         "\"hello world\"",
         "{any}",
@@ -134,7 +134,7 @@ test "symbol" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     const symbol = try Symbol.fromStr("my-symbol");
-    const val = try Val.fromZig(&vm, symbol);
+    const val = try Val.from(&vm, symbol);
     try std.testing.expectFmt(
         "my-symbol",
         "{any}",
@@ -147,7 +147,7 @@ test "quoted symbol" {
     defer vm.deinit();
     const symbol = try Symbol.fromStr("''my-symbol");
     try std.testing.expectEqual(2, symbol.quotes());
-    const val = try Val.fromZig(&vm, symbol);
+    const val = try Val.from(&vm, symbol);
     try std.testing.expectFmt(
         "''my-symbol",
         "{any}",
@@ -159,7 +159,7 @@ test "key" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     const key = Symbol.Key{ .name = "my-key" };
-    const val = try Val.fromZig(&vm, key);
+    const val = try Val.from(&vm, key);
     try std.testing.expectFmt(
         ":my-key",
         "{any}",
@@ -171,11 +171,11 @@ test "list" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     const list = [_]Val{
-        try Val.fromZig(&vm, 123),
-        try Val.fromZig(&vm, true),
-        try Val.fromZig(&vm, @as([]const u8, "hello")),
+        try Val.from(&vm, 123),
+        try Val.from(&vm, true),
+        try Val.from(&vm, @as([]const u8, "hello")),
     };
-    const val = try Val.fromZig(&vm, @as([]const Val, &list));
+    const val = try Val.from(&vm, @as([]const Val, &list));
     try std.testing.expectFmt(
         "(123 true \"hello\")",
         "{any}",
@@ -187,7 +187,7 @@ test "empty list" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     const list = [_]Val{};
-    const val = try Val.fromZig(&vm, @as([]const Val, &list));
+    const val = try Val.from(&vm, @as([]const Val, &list));
     try std.testing.expectFmt(
         "()",
         "{any}",
@@ -199,14 +199,14 @@ test "nested list" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     const list1 = [_]Val{
-        try Val.fromZig(&vm, 123),
-        try Val.fromZig(&vm, true),
+        try Val.from(&vm, 123),
+        try Val.from(&vm, true),
     };
     const list2 = [_]Val{
-        try Val.fromZig(&vm, @as([]const Val, &list1)),
-        try Val.fromZig(&vm, @as([]const u8, "hello")),
+        try Val.from(&vm, @as([]const Val, &list1)),
+        try Val.from(&vm, @as([]const u8, "hello")),
     };
-    const val = try Val.fromZig(&vm, @as([]const Val, &list2));
+    const val = try Val.from(&vm, @as([]const Val, &list2));
     try std.testing.expectFmt(
         "((123 true) \"hello\")",
         "{any}",
@@ -222,7 +222,7 @@ test "native function" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try vm.global.registerFunction(&vm, NativeFunction.init("my-func", myFunc));
-    const val = try vm.evalStr(Val, "my-func");
+    const val = try vm.evalStr("my-func");
     try std.testing.expectFmt(
         "(native-function my-func)",
         "{any}",
@@ -233,8 +233,8 @@ test "native function" {
 test "bytecode function" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try vm.evalStr(void, "(defun foo () 42)");
-    const val = try vm.evalStr(Val, "foo");
+    _ = try vm.evalStr("(defun foo () 42)");
+    const val = try vm.evalStr("foo");
     try std.testing.expectFmt(
         "(function foo)",
         "{any}",

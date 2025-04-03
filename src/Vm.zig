@@ -64,7 +64,7 @@ pub fn init(options: Options) !Vm {
 test init {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try vm.evalStr(void,
+    _ = try vm.evalStr(
         \\ (defun fib (n)
         \\   (if (< n 2) (return n))
         \\   (+ (fib (- n 1))
@@ -72,7 +72,7 @@ test init {
     );
     try std.testing.expectEqual(
         55,
-        try vm.evalStr(i64, "(fib 10)"),
+        try vm.to(i64, try vm.evalStr("(fib 10)")),
     );
 }
 
@@ -88,17 +88,14 @@ pub fn allocator(self: *Vm) std.mem.Allocator {
     return self.options.allocator;
 }
 
-/// Evaluate `source` as Spore code and return the result as type `T`.
-///
-/// If the return value does not matter, then using `Val` as `T` will
-/// return the raw object without attempting any conversions.
+/// Evaluate `source` as Spore code and return the result as a `Val`.
 ///
 /// If `source` contains multiple expressions, then only the last one
 /// is returned.
 ///
 /// Depending on what is inside `Val`, it may only be valid until the
 /// next `Vm.runGc` call.
-pub fn evalStr(self: *Vm, T: type, source: []const u8) !T {
+pub fn evalStr(self: *Vm, source: []const u8) !Val {
     var ast_builder = AstBuilder.init(self, source);
     var compiler = try Compiler.init(self);
     defer compiler.deinit();
@@ -115,14 +112,14 @@ pub fn evalStr(self: *Vm, T: type, source: []const u8) !T {
         try self.stack.frames.append(self.allocator(), stack_frame);
         ret = try self.runUnsafe();
     }
-    return ret.toZig(T, self);
+    return ret;
 }
 
 test evalStr {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
 
-    try vm.evalStr(void,
+    _ = try vm.evalStr(
         \\ (defun fib (n)
         \\   (if (< n 2) (return n))
         \\   (+ (fib (- n 1))
@@ -130,11 +127,15 @@ test evalStr {
     );
     try std.testing.expectEqual(
         55,
-        try vm.evalStr(i64, "(fib 10)"),
+        try vm.to(i64, try vm.evalStr("(fib 10)")),
     );
 
-    const val = try vm.evalStr(Val, "(+ 2 2)");
+    const val = try vm.evalStr("(+ 2 2)");
     try std.testing.expectFmt("4", "{any}", .{val.formatted(&vm)});
+}
+
+pub fn to(vm: *const Vm, T: type, val: Val) !T {
+    return val.to(T, vm);
 }
 
 /// Run the garbage collector.
@@ -151,8 +152,8 @@ test runGc {
     defer vm.deinit();
 
     // .. do stuff
-    const keep_me = try vm.evalStr(Val, "(list 1 2 3 4)");
-    const dont_keep_me = try vm.evalStr(Val, "(list 5 6 7 8)");
+    const keep_me = try vm.evalStr("(list 1 2 3 4)");
+    const dont_keep_me = try vm.evalStr("(list 5 6 7 8)");
 
     // Free unused memory.
     try vm.runGc(&.{keep_me});

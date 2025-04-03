@@ -27,9 +27,9 @@ fn plusImpl(vm: *Vm, vals: []const Val) Error!Val {
     };
     if (has_float) {
         const int_sum_as_float: f64 = @floatFromInt(int_sum);
-        return Val.fromZig(vm, float_sum + int_sum_as_float);
+        return Val.from(vm, float_sum + int_sum_as_float);
     }
-    return Val.fromZig(vm, int_sum);
+    return Val.from(vm, int_sum);
 }
 
 fn plusFn(vm: *Vm) Error!Val {
@@ -49,18 +49,18 @@ fn minusFn(vm: *Vm) Error!Val {
 }
 
 fn negate(vm: *Vm, val: Val) Error!Val {
-    const number = try val.toZig(Val.Number, vm);
+    const number = try val.to(Val.Number, vm);
     switch (number) {
-        .int => |x| return Val.fromZig(vm, -x),
-        .float => |x| return Val.fromZig(vm, -x),
+        .int => |x| return Val.from(vm, -x),
+        .float => |x| return Val.from(vm, -x),
     }
 }
 
 fn lessFn(vm: *Vm) Error!Val {
     const args = vm.stack.local();
     const arg_count = args.len;
-    if (arg_count == 0) return Val.fromZig(vm, true);
-    if (arg_count == 1) if (args[0].is(Val.Number)) return Val.fromZig(vm, true) else return Error.WrongType;
+    if (arg_count == 0) return Val.from(vm, true);
+    if (arg_count == 1) if (args[0].is(Val.Number)) return Val.from(vm, true) else return Error.WrongType;
     var res = true;
     var lhs = converters.iter(Val.Number, vm, args[0 .. arg_count - 1]);
     var rhs = converters.iter(Val.Number, vm, args[1..]);
@@ -85,14 +85,14 @@ fn lessFn(vm: *Vm) Error!Val {
             },
         }
     }
-    return Val.fromZig(vm, res);
+    return Val.from(vm, res);
 }
 
 fn greaterFn(vm: *Vm) Error!Val {
     const args = vm.stack.local();
     const arg_count = args.len;
-    if (arg_count == 0) return Val.fromZig(vm, true);
-    if (arg_count == 1) if (args[0].is(Val.Number)) return Val.fromZig(vm, true) else return Error.WrongType;
+    if (arg_count == 0) return Val.from(vm, true);
+    if (arg_count == 1) if (args[0].is(Val.Number)) return Val.from(vm, true) else return Error.WrongType;
     var res = true;
     var lhs = converters.iter(Val.Number, vm, args[0 .. arg_count - 1]);
     var rhs = converters.iter(Val.Number, vm, args[1..]);
@@ -117,57 +117,57 @@ fn greaterFn(vm: *Vm) Error!Val {
             },
         }
     }
-    return Val.fromZig(vm, res);
+    return Val.from(vm, res);
 }
 
 test "+ adds integers" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(6, try vm.evalStr(i64, "(+ 1 2 3)"));
+    try std.testing.expectEqual(6, try vm.to(i64, try vm.evalStr("(+ 1 2 3)")));
 }
 
 test "+ adds floats" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(6.0, try vm.evalStr(f64, "(+ 1.0 2.0 3.0)"));
+    try std.testing.expectEqual(6.0, try vm.to(f64, try vm.evalStr("(+ 1.0 2.0 3.0)")));
 }
 
 test "+ adds mixed integers and floats and returns float" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(6.0, try vm.evalStr(f64, "(+ 1 2.0 3)"));
-    try std.testing.expectEqual(3.5, try vm.evalStr(f64, "(+ 1.0 2 0.5)"));
+    try std.testing.expectEqual(6.0, try vm.to(f64, try vm.evalStr("(+ 1 2.0 3)")));
+    try std.testing.expectEqual(3.5, try vm.to(f64, try vm.evalStr("(+ 1.0 2 0.5)")));
 }
 
 test "+ returns 0 if no arguments" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(0, try vm.evalStr(i64, "(+)"));
+    try std.testing.expectEqual(0, try vm.to(i64, try vm.evalStr("(+)")));
 }
 
 test "- subtracts integers" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(-4, try vm.evalStr(i64, "(- 1 2 3)"));
+    try std.testing.expectEqual(-4, try vm.to(i64, try vm.evalStr("(- 1 2 3)")));
 }
 
 test "- subtracts floats" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(-4.0, try vm.evalStr(f64, "(- 1.0 2.0 3.0)"));
+    try std.testing.expectEqual(-4.0, try vm.to(f64, try vm.evalStr("(- 1.0 2.0 3.0)")));
 }
 
 test "- subtracts mixed integers and floats and returns float" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(-4.0, try vm.evalStr(f64, "(- 1 2.0 3)"));
+    try std.testing.expectEqual(-4.0, try vm.to(f64, try vm.evalStr("(- 1 2.0 3)")));
 }
 
 test "- negates if only single argument" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(-1, try vm.evalStr(i64, "(- 1)"));
-    try std.testing.expectEqual(-1.0, try vm.evalStr(f64, "(- 1.0)"));
+    try std.testing.expectEqual(-1, try vm.to(i64, try vm.evalStr("(- 1)")));
+    try std.testing.expectEqual(-1.0, try vm.to(f64, try vm.evalStr("(- 1.0)")));
 }
 
 test "- returns error if no arguments" {
@@ -175,28 +175,28 @@ test "- returns error if no arguments" {
     defer vm.deinit();
     try std.testing.expectError(
         Error.WrongArity,
-        vm.evalStr(Val, "(-)"),
+        vm.evalStr("(-)"),
     );
 }
 
 test "< returns true if less, false otherwise" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(true, try vm.evalStr(bool, "(< 1 2.2 3)"));
-    try std.testing.expectEqual(true, try vm.evalStr(bool, "(< 1)"));
-    try std.testing.expectEqual(false, try vm.evalStr(bool, "(< 1 2 3 2)"));
-    try std.testing.expectEqual(false, try vm.evalStr(bool, "(< 2 1)"));
-    try std.testing.expectEqual(false, try vm.evalStr(bool, "(< 1 1)"));
+    try std.testing.expectEqual(true, try vm.to(bool, try vm.evalStr("(< 1 2.2 3)")));
+    try std.testing.expectEqual(true, try vm.to(bool, try vm.evalStr("(< 1)")));
+    try std.testing.expectEqual(false, try vm.to(bool, try vm.evalStr("(< 1 2 3 2)")));
+    try std.testing.expectEqual(false, try vm.to(bool, try vm.evalStr("(< 2 1)")));
+    try std.testing.expectEqual(false, try vm.to(bool, try vm.evalStr("(< 1 1)")));
 }
 
 test "> returns true if greater, false otherwise" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try std.testing.expectEqual(true, try vm.evalStr(bool, "(> 2 1 0)"));
-    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 2 1 1.1)"));
-    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 1 1.5 1.8 2)"));
-    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 1 1)"));
-    try std.testing.expectEqual(true, try vm.evalStr(bool, "(> 2.0 1.0)"));
-    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 1.0 2.0)"));
-    try std.testing.expectEqual(false, try vm.evalStr(bool, "(> 1.0 1.0)"));
+    try std.testing.expectEqual(true, try vm.to(bool, try vm.evalStr("(> 2 1 0)")));
+    try std.testing.expectEqual(false, try vm.to(bool, try vm.evalStr("(> 2 1 1.1)")));
+    try std.testing.expectEqual(false, try vm.to(bool, try vm.evalStr("(> 1 1.5 1.8 2)")));
+    try std.testing.expectEqual(false, try vm.to(bool, try vm.evalStr("(> 1 1)")));
+    try std.testing.expectEqual(true, try vm.to(bool, try vm.evalStr("(> 2.0 1.0)")));
+    try std.testing.expectEqual(false, try vm.to(bool, try vm.evalStr("(> 1.0 2.0)")));
+    try std.testing.expectEqual(false, try vm.to(bool, try vm.evalStr("(> 1.0 1.0)")));
 }

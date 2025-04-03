@@ -14,9 +14,9 @@ pub fn defMacro(vm: *Vm) Error!Val {
     if (expr.len != 2) {
         return Error.BadDefine;
     }
-    const symbol = expr[0].toZig(Symbol.Interned, {}) catch return Error.ExpectedIdentifier;
-    return try Val.fromZig(vm, @as([]const Val, &[_]Val{
-        try Val.fromZig(vm, try Symbol.fromStr("%define")),
+    const symbol = expr[0].to(Symbol.Interned, {}) catch return Error.ExpectedIdentifier;
+    return try Val.from(vm, @as([]const Val, &[_]Val{
+        try Val.from(vm, try Symbol.fromStr("%define")),
         symbol.quoted().toVal(),
         expr[1],
     }));
@@ -28,7 +28,7 @@ pub fn defunMacro(vm: *Vm) Error!Val {
     if (expr.len < 3) {
         return Error.BadDefine;
     }
-    const function_name = expr[0].toZig(Symbol.Interned, {}) catch return Error.BadDefine;
+    const function_name = expr[0].to(Symbol.Interned, {}) catch return Error.BadDefine;
     const args = expr[1];
     const body = expr[2..];
     var function_expr = try std.ArrayListUnmanaged(Val).initCapacity(
@@ -43,10 +43,10 @@ pub fn defunMacro(vm: *Vm) Error!Val {
         vm,
         try function_expr.toOwnedSlice(vm.allocator()),
     );
-    return try Val.fromZig(
+    return try Val.from(
         vm,
         @as([]const Val, &[_]Val{
-            try Val.fromZig(vm, try Symbol.fromStr("%define")),
+            try Val.from(vm, try Symbol.fromStr("%define")),
             function_name.quoted().toVal(),
             function_expr_val,
         }),
@@ -64,9 +64,9 @@ pub fn whenMacro(vm: *Vm) Error!Val {
     defer vm.allocator().free(body_expr);
     const pred = body_expr[0];
     body_expr[0] = do_symbol.toVal();
-    return try Val.fromZig(vm, @as([]const Val, &.{
+    return try Val.from(vm, @as([]const Val, &.{
         if_symbol.toVal(),
         pred,
-        try Val.fromZig(vm, body_expr),
+        try Val.from(vm, body_expr),
     }));
 }

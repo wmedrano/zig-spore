@@ -60,7 +60,9 @@ pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
     return object_storage.get(id);
 }
 
-/// `Marker` is used to mark objects as being used.
+/// `Marker` is used to mark objects that are in use by the virtual machine.
+///
+/// Objects that are left unmarked may be garbage collected.
 pub const Marker = struct {
     object_manager: *ObjectManager,
 
@@ -213,17 +215,17 @@ test "garbage collector removes unused val" {
     defer vm.deinit();
 
     // Before GC
-    const gc_val = try vm.evalStr(Val, @as([]const u8, "\"hello world\""));
+    const gc_val = try vm.evalStr("\"hello world\"");
     try std.testing.expectEqualStrings(
         "hello world",
-        try gc_val.toZig([]const u8, &vm),
+        try vm.to([]const u8, gc_val),
     );
 
     // After GC
     try vm.runGc(&.{});
     try std.testing.expectError(
         Error.ObjectNotFound,
-        gc_val.toZig([]const u8, &vm),
+        vm.to([]const u8, gc_val),
     );
 }
 
@@ -232,17 +234,17 @@ test "garbage collector keeps external value" {
     defer vm.deinit();
 
     // Before GC
-    const keep_val = try vm.evalStr(Val, @as([]const u8, "\"hello world\""));
+    const keep_val = try vm.evalStr("\"hello world\"");
     try std.testing.expectEqualStrings(
         "hello world",
-        try keep_val.toZig([]const u8, &vm),
+        try vm.to([]const u8, keep_val),
     );
 
     // After GC
     try vm.runGc(&.{keep_val});
     try std.testing.expectEqualStrings(
         "hello world",
-        try keep_val.toZig([]const u8, &vm),
+        try vm.to([]const u8, keep_val),
     );
 }
 
@@ -251,18 +253,18 @@ test "garbage collector keeps global value" {
     defer vm.deinit();
 
     // Before GC
-    const global_val = try vm.evalStr(Val, @as([]const u8, "\"hello world\""));
+    const global_val = try vm.evalStr("\"hello world\"");
     try vm.global.registerValueByName(&vm, "global-value", global_val);
     try std.testing.expectEqualStrings(
         "hello world",
-        try vm.evalStr([]const u8, "global-value"),
+        try vm.to([]const u8, try vm.evalStr("global-value")),
     );
 
     // After GC
     try vm.runGc(&.{});
     try std.testing.expectEqualStrings(
         "hello world",
-        try global_val.toZig([]const u8, &vm),
+        try vm.to([]const u8, global_val),
     );
 }
 
@@ -271,8 +273,8 @@ test "referenced bytecode values are not garbage collected" {
     defer vm.deinit();
 
     // Before GC
-    _ = try vm.evalStr(Val, "(defun magic-string () \"hello world\")");
-    const referenced_val = try vm.evalStr(Val, "(magic-string)");
+    _ = try vm.evalStr("(defun magic-string () \"hello world\")");
+    const referenced_val = try vm.evalStr("(magic-string)");
     try std.testing.expectFmt(
         "\"hello world\"",
         "{any}",
@@ -293,7 +295,7 @@ test "referenced list values are not garbage collected" {
     defer vm.deinit();
 
     // Before GC
-    _ = try vm.evalStr(Val, "(def magic-strings (list \"hello\" \"world\"))");
+    _ = try vm.evalStr("(def magic-strings (list \"hello\" \"world\"))");
     const referenced_val = vm.global.getValueByName(&vm, "magic-strings").?;
     try std.testing.expectFmt(
         "(\"hello\" \"world\")",

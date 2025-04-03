@@ -14,11 +14,16 @@ const converters = @import("../converters.zig");
 
 const Compiler = @This();
 
+/// The virtual machine to compile for.
 vm: *Vm,
+/// The current set of instructions that have been constructed.
 instructions: std.ArrayListUnmanaged(Instruction),
-// The symbol that is in thep process of being defined.
+/// The symbol that is in the process of being defined.
 define_context: []const u8,
+/// The values on the local stack where the `nth` element of `locals`
+/// is the `nth` element on the local stack.
 locals: std.ArrayListUnmanaged([]const u8),
+/// Object used to expand expressions with macros.
 macro_expander: MacroExpander,
 
 fn fieldType(comptime T: type, comptime field_name: []const u8) type {
@@ -88,10 +93,10 @@ fn ownedInstructions(self: *Compiler) ![]Instruction {
 
 fn compileOne(self: *Compiler, expr: Val) Error!void {
     if (expr.is([]const Val)) {
-        return self.compileTree(try expr.toZig([]const Val, self.vm));
+        return self.compileTree(try expr.to([]const Val, self.vm));
     }
     if (expr.is(Symbol.Interned)) {
-        return self.compileSymbol(try expr.toZig(Symbol.Interned, {}));
+        return self.compileSymbol(try expr.to(Symbol.Interned, {}));
     }
     try self.instructions.append(self.allocator(), .{ .push = expr });
 }
@@ -99,7 +104,7 @@ fn compileOne(self: *Compiler, expr: Val) Error!void {
 fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) Error!void {
     if (symbol.quotes != 0) {
         return self.instructions.append(self.allocator(), .{
-            .push = try Val.fromZig(
+            .push = try Val.from(
                 self.vm,
                 Symbol.Interned{ .quotes = symbol.quotes - 1, .id = symbol.id },
             ),
@@ -119,12 +124,12 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
         return Error.UnexpectedEmptyExpression;
     }
     if (nodes[0].is(Symbol.Interned)) {
-        const leading_symbol = try nodes[0].toZig(Symbol.Interned, {});
+        const leading_symbol = try nodes[0].to(Symbol.Interned, {});
         if (leading_symbol.eql(self.macro_expander.function)) {
             if (nodes.len < 3) {
                 return Error.BadFunction;
             }
-            const args = nodes[1].toZig([]const Val, self.vm) catch return Error.BadFunction;
+            const args = nodes[1].to([]const Val, self.vm) catch return Error.BadFunction;
             return self.compileFunction(args, nodes[2..]);
         } else if (leading_symbol.eql(self.macro_expander.@"%define")) {
             if (nodes.len != 3) return Error.BadDefine;
@@ -163,7 +168,7 @@ fn compileDefine(self: *Compiler, name: Val, expr: Val) Error!void {
     if (!name.is(Symbol.Interned)) {
         return Error.BadDefine;
     }
-    const interned_name = try name.toZig(Symbol.Interned, {});
+    const interned_name = try name.to(Symbol.Interned, {});
     self.define_context = blk: {
         if (interned_name.toSymbol(self.vm)) |name_sym| {
             if (name_sym.quotes() > 1) {
@@ -212,7 +217,7 @@ fn compileFunction(self: *Compiler, args: []const Val, exprs: []const Val) !void
     var function_compiler = try Compiler.init(self.vm);
     defer function_compiler.deinit();
     for (args) |arg| {
-        const arg_symbol = arg.toZig(Symbol, self.vm) catch return Error.BadFunction;
+        const arg_symbol = arg.to(Symbol, self.vm) catch return Error.BadFunction;
         if (arg_symbol.isQuoted()) return Error.BadFunction;
         try function_compiler.addLocal(arg_symbol.name());
     }

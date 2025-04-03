@@ -80,10 +80,10 @@ fn atomToVal(vm: *Vm, atom: []const u8) AstError!Val {
         return error.EmptyAtom;
     }
     if (std.mem.eql(u8, atom, "true")) {
-        return Val.fromZig(vm, true);
+        return Val.from(vm, true);
     }
     if (std.mem.eql(u8, atom, "false")) {
-        return Val.fromZig(vm, false);
+        return Val.from(vm, false);
     }
     if (atom[0] == '\"') {
         return stringAtomToVal(vm, atom);
@@ -92,13 +92,13 @@ fn atomToVal(vm: *Vm, atom: []const u8) AstError!Val {
         return keyAtomToVal(vm, atom);
     }
     if (std.fmt.parseInt(i64, atom, 10)) |x| {
-        return Val.fromZig(vm, x);
+        return Val.from(vm, x);
     } else |_| {}
     if (std.fmt.parseFloat(f64, atom)) |x| {
-        return Val.fromZig(vm, x);
+        return Val.from(vm, x);
     } else |_| {}
     const symbol = try Symbol.fromStr(atom);
-    return Val.fromZig(vm, symbol);
+    return Val.from(vm, symbol);
 }
 
 fn stringAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
@@ -127,7 +127,7 @@ fn stringAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
         return error.BadString;
     }
     // TODO: Use the owned value of ret.items to avoid allocation.
-    return Val.fromZig(vm, ret.items);
+    return Val.from(vm, ret.items);
 }
 
 fn keyAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
@@ -135,7 +135,7 @@ fn keyAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
         return AstError.EmptyKey;
     }
     std.debug.assert(atom[0] == ':');
-    return Val.fromZig(vm, Symbol.Key{ .name = atom[1..] });
+    return Val.from(vm, Symbol.Key{ .name = atom[1..] });
 }
 
 test "empty source produces no asts" {
@@ -160,11 +160,11 @@ test "parse atoms" {
         &[_]Ast{
             .{
                 .location = .{ .start = 0, .end = 1 },
-                .expr = try Val.fromZig(&vm, 0),
+                .expr = try Val.from(&vm, 0),
             },
             .{
                 .location = .{ .start = 2, .end = 5 },
-                .expr = try Val.fromZig(&vm, 1.0),
+                .expr = try Val.from(&vm, 1.0),
             },
             .{
                 .location = .{ .start = 6, .end = 14 },
@@ -172,29 +172,29 @@ test "parse atoms" {
             },
             .{
                 .location = .{ .start = 15, .end = 21 },
-                .expr = try Val.fromZig(&vm, try Symbol.fromStr("symbol")),
+                .expr = try Val.from(&vm, try Symbol.fromStr("symbol")),
             },
             .{
                 .location = .{ .start = 22, .end = 36 },
-                .expr = try Val.fromZig(&vm, Symbol{ ._quotes = 1, ._name = "quoted-symbol" }),
+                .expr = try Val.from(&vm, Symbol{ ._quotes = 1, ._name = "quoted-symbol" }),
             },
             .{
                 .location = .{ .start = 37, .end = 41 },
-                .expr = try Val.fromZig(&vm, Symbol.Key{ .name = "key" }),
+                .expr = try Val.from(&vm, Symbol.Key{ .name = "key" }),
             },
             .{
                 .location = .{ .start = 42, .end = 46 },
-                .expr = try Val.fromZig(&vm, true),
+                .expr = try Val.from(&vm, true),
             },
             .{
                 .location = .{ .start = 47, .end = 52 },
-                .expr = try Val.fromZig(&vm, false),
+                .expr = try Val.from(&vm, false),
             },
         },
         actual,
     );
     try std.testing.expectEqualStrings(
         "string",
-        try actual[2].expr.toZig([]const u8, &vm),
+        try actual[2].expr.to([]const u8, &vm),
     );
 }

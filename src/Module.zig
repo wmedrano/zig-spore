@@ -37,19 +37,19 @@ pub fn registerFunction(self: *Module, vm: *Vm, func: *const NativeFunction) !vo
 }
 
 fn addTwo(vm: *Vm, args: struct { number: i64 }) Error!Val {
-    return Val.fromZig(vm, 2 + args.number);
+    return Val.from(vm, 2 + args.number);
 }
 
 test registerFunction {
     // fn addTwo(vm: *Vm, args: struct { number: i64 }) Error!Val {
-    //     return Val.fromZig(vm, 2 + args.number);
+    //     return Val.from(vm, 2 + args.number);
     // }
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try vm.global.registerFunction(&vm, NativeFunction.withArgParser("add-2", addTwo));
     try std.testing.expectEqual(
         10,
-        try vm.evalStr(i64, "(add-2 8)"),
+        try vm.to(i64, try vm.evalStr("(add-2 8)")),
     );
 }
 
