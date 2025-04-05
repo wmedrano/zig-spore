@@ -15,7 +15,7 @@ pub const Error = error{
     WrongArity,
 } ||
     ToZigError ||
-    AstError ||
+    SexpError ||
     std.mem.Allocator.Error;
 
 pub const ToZigError = error{
@@ -26,7 +26,7 @@ pub const ToZigError = error{
     ObjectNotFound,
 };
 
-pub const AstError = error{
+pub const SexpError = error{
     BadString,
     EmptyAtom,
     EmptyKey,

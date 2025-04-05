@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const AstBuilder = @import("../compiler/AstBuilder.zig");
+const SexpBuilder = @import("../compiler/SexpBuilder.zig");
 const Error = @import("../error.zig").Error;
 const NativeFunction = Val.NativeFunction;
 const Val = Vm.Val;
@@ -9,8 +9,6 @@ const converters = @import("../converters.zig");
 
 pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, NativeFunction.withArgParser("str-len", strLenFn));
-    try vm.global.registerFunction(vm, NativeFunction.init("str->sexps", strToSexpsFn));
-    try vm.global.registerFunction(vm, NativeFunction.init("str->sexp", strToSexpFn));
     try vm.global.registerFunction(vm, NativeFunction.withArgParser("print", printFn));
 }
 
@@ -19,60 +17,10 @@ pub fn strLenFn(vm: *Vm, args: struct { str: []const u8 }) Error!Val {
     return Val.from(vm, len);
 }
 
-pub fn strToSexpsFn(vm: *Vm) Error!Val {
-    const args = try converters.parseAsArgs(
-        struct { str: []const u8 },
-        vm,
-        vm.stack.local(),
-    );
-    var ast_builder = AstBuilder.init(vm, args.str);
-    while (try ast_builder.next()) |ast| {
-        try vm.stack.push(ast.expr);
-    }
-    const exprs = vm.stack.local()[1..];
-    return Val.from(vm, exprs);
-}
-
-pub fn strToSexpFn(vm: *Vm) Error!Val {
-    const sexps = try strToSexpsFn(vm);
-    const exprs = try sexps.to([]const Val, vm);
-    switch (exprs.len) {
-        0 => return Val.init(),
-        1 => return exprs[0],
-        else => return Error.BadArg,
-    }
-}
-
 test "str-len returns string length" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
     try std.testing.expectEqual(4, try vm.to(i64, try vm.evalStr("(str-len \"1234\")")));
-}
-
-test "str->sexp produces s-expression" {
-    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    defer vm.deinit();
-    const actual = try vm.evalStr("(str->sexp \"   (+ 1 (foo 2 3 :key ''quoted))    \")");
-    try std.testing.expectFmt(
-        "(+ 1 (foo 2 3 :key ''quoted))",
-        "{any}",
-        .{actual.formatted(&vm)},
-    );
-}
-
-test "str->sexp on empty string produces void" {
-    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    defer vm.deinit();
-    try vm.to(void, try vm.evalStr("(str->sexp \"\")"));
-}
-
-test "str->sexp with multiple sexps returns error" {
-    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
-    defer vm.deinit();
-    try std.testing.expectError(
-        Error.BadArg,
-        vm.evalStr("(str->sexp \"(+ 1 2) (+ 3 4)\")"),
-    );
 }
 
 fn printFn(vm: *Vm, args: struct { val: Val }) Error!Val {

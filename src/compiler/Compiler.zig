@@ -5,55 +5,40 @@ const Allocator = std.mem.Allocator;
 const ByteCodeFunction = Val.ByteCodeFunction;
 const Error = root.Error;
 const Instruction = @import("../instruction.zig").Instruction;
-const MacroExpander = @import("MacroExpander.zig");
 const Symbol = Val.Symbol;
 const Val = Vm.Val;
 const Vm = root.Vm;
 const builtin_macros = @import("../builtins/macros.zig");
 const converters = @import("../converters.zig");
+const macro_expand = @import("macro_expand.zig");
 
 const Compiler = @This();
 
-/// The virtual machine to compile for.
-vm: *Vm,
 /// The current set of instructions that have been constructed.
-instructions: std.ArrayListUnmanaged(Instruction),
+instructions: std.ArrayListUnmanaged(Instruction) = .{},
 /// The symbol that is in the process of being defined.
-define_context: []const u8,
+define_context: []const u8 = "",
 /// The values on the local stack where the `nth` element of `locals`
 /// is the `nth` element on the local stack.
-locals: std.ArrayListUnmanaged([]const u8),
-/// Object used to expand expressions with macros.
-macro_expander: MacroExpander,
+locals: std.ArrayListUnmanaged([]const u8) = .{},
 
-fn fieldType(comptime T: type, comptime field_name: []const u8) type {
-    return @TypeOf(@field(@as(T, undefined), field_name));
+/// Deinitializes the compiler, freeing any allocated memory.
+pub fn deinit(self: *Compiler, vm: *Vm) void {
+    self.instructions.deinit(vm.allocator());
+    self.locals.deinit(vm.allocator());
 }
 
-/// Initialize a new compiler for a `Vm`.
-pub fn init(vm: *Vm) !Compiler {
-    return Compiler{
-        .vm = vm,
-        .instructions = .{},
-        .define_context = "",
-        .locals = .{},
-        .macro_expander = try MacroExpander.init(vm),
-    };
+/// Compiles a `Val` expression into a slice of `Instruction`s.
+///
+/// Expands any macros in the expression before compiling.
+pub fn compile(self: *Compiler, vm: *Vm, expr: Val) ![]Instruction {
+    const expanded_expr = try macro_expand.expand(vm, expr);
+    try self.resetAndCompile(vm, &.{expanded_expr});
+    return self.instructions.toOwnedSlice(vm.allocator());
 }
 
-pub fn deinit(self: *Compiler) void {
-    self.instructions.deinit(self.allocator());
-    self.locals.deinit(self.allocator());
-}
-
-pub fn compile(self: *Compiler, expr: Val) ![]Instruction {
-    const expanded_expr = try self.macro_expander.macroExpand(self.vm, expr);
-    try self.resetAndCompile(&.{expanded_expr});
-    return self.instructions.toOwnedSlice(self.allocator());
-}
-
-fn addLocal(self: *Compiler, name: []const u8) !void {
-    try self.locals.append(self.allocator(), name);
+fn addLocal(self: *Compiler, vm: *Vm, name: []const u8) !void {
+    try self.locals.append(vm.allocator(), name);
 }
 
 const ResolvedName = union(enum) {
@@ -68,7 +53,7 @@ const ResolvedName = union(enum) {
     }
 };
 
-fn resolveIdentifier(self: *Compiler, name: []const u8) !ResolvedName {
+fn resolveIdentifier(self: *Compiler, vm: *Vm, name: []const u8) !ResolvedName {
     var idx = self.locals.items.len;
     while (idx > 0) {
         idx -= 1;
@@ -77,47 +62,47 @@ fn resolveIdentifier(self: *Compiler, name: []const u8) !ResolvedName {
         }
     }
     const symbol = try Symbol.fromStr(name);
-    return .{ .global = try symbol.intern(self.vm) };
+    return .{ .global = try symbol.intern(vm) };
 }
 
-fn resetAndCompile(self: *Compiler, exprs: []const Val) !void {
+fn resetAndCompile(self: *Compiler, vm: *Vm, exprs: []const Val) !void {
     self.instructions.clearRetainingCapacity();
     for (exprs) |expr| {
-        try self.compileOne(expr);
+        try self.compileOne(vm, expr);
     }
 }
 
-fn ownedInstructions(self: *Compiler) ![]Instruction {
-    return try self.instructions.toOwnedSlice(self.allocator());
+fn ownedInstructions(self: *Compiler, vm: *Vm) ![]Instruction {
+    return try self.instructions.toOwnedSlice(vm.allocator());
 }
 
-fn compileOne(self: *Compiler, expr: Val) Error!void {
+fn compileOne(self: *Compiler, vm: *Vm, expr: Val) Error!void {
     if (expr.is([]const Val)) {
-        return self.compileTree(try expr.to([]const Val, self.vm));
+        return self.compileTree(vm, try expr.to([]const Val, vm));
     }
     if (expr.is(Symbol.Interned)) {
-        return self.compileSymbol(try expr.to(Symbol.Interned, {}));
+        return self.compileSymbol(vm, try expr.to(Symbol.Interned, {}));
     }
-    try self.instructions.append(self.allocator(), .{ .push = expr });
+    try self.instructions.append(vm.allocator(), .{ .push = expr });
 }
 
-fn compileSymbol(self: *Compiler, symbol: Symbol.Interned) Error!void {
+fn compileSymbol(self: *Compiler, vm: *Vm, symbol: Symbol.Interned) Error!void {
     if (symbol.quotes != 0) {
-        return self.instructions.append(self.allocator(), .{
+        return self.instructions.append(vm.allocator(), .{
             .push = try Val.from(
-                self.vm,
+                vm,
                 Symbol.Interned{ .quotes = symbol.quotes - 1, .id = symbol.id },
             ),
         });
     }
-    if (symbol.toSymbol(self.vm)) |named_symbol| {
-        const resolved = try self.resolveIdentifier(named_symbol.name());
-        return self.instructions.append(self.allocator(), resolved.toInstruction());
+    if (symbol.toSymbol(vm)) |named_symbol| {
+        const resolved = try self.resolveIdentifier(vm, named_symbol.name());
+        return self.instructions.append(vm.allocator(), resolved.toInstruction());
     }
-    try self.instructions.append(self.allocator(), .{ .deref = symbol });
+    try self.instructions.append(vm.allocator(), .{ .deref = symbol });
 }
 
-fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
+fn compileTree(self: *Compiler, vm: *Vm, nodes: []const Val) Error!void {
     const old_context = self.define_context;
     defer self.define_context = old_context;
     if (nodes.len == 0) {
@@ -125,44 +110,44 @@ fn compileTree(self: *Compiler, nodes: []const Val) Error!void {
     }
     if (nodes[0].is(Symbol.Interned)) {
         const leading_symbol = try nodes[0].to(Symbol.Interned, {});
-        if (leading_symbol.eql(self.macro_expander.function)) {
+        if (leading_symbol.eql(vm.common_symbols.function)) {
             if (nodes.len < 3) {
                 return Error.BadFunction;
             }
-            const args = nodes[1].to([]const Val, self.vm) catch return Error.BadFunction;
-            return self.compileFunction(args, nodes[2..]);
-        } else if (leading_symbol.eql(self.macro_expander.@"%define")) {
+            const args = nodes[1].to([]const Val, vm) catch return Error.BadFunction;
+            return self.compileFunction(vm, args, nodes[2..]);
+        } else if (leading_symbol.eql(vm.common_symbols.@"%define")) {
             if (nodes.len != 3) return Error.BadDefine;
-            return self.compileDefine(nodes[1], nodes[2]);
-        } else if (leading_symbol.eql(self.macro_expander.@"if")) {
+            return self.compileDefine(vm, nodes[1], nodes[2]);
+        } else if (leading_symbol.eql(vm.common_symbols.@"if")) {
             switch (nodes.len) {
-                3 => return self.compileIf(nodes[1], nodes[2], Val.init()),
-                4 => return self.compileIf(nodes[1], nodes[2], nodes[3]),
+                3 => return self.compileIf(vm, nodes[1], nodes[2], Val.init()),
+                4 => return self.compileIf(vm, nodes[1], nodes[2], nodes[3]),
                 else => return Error.BadIf,
             }
-        } else if (leading_symbol.eql(self.macro_expander.@"return")) {
+        } else if (leading_symbol.eql(vm.common_symbols.@"return")) {
             switch (nodes.len) {
-                1 => return self.compileReturn(Val.init()),
-                2 => return self.compileReturn(nodes[1]),
+                1 => return self.compileReturn(vm, Val.init()),
+                2 => return self.compileReturn(vm, nodes[1]),
                 else => return Error.BadArg,
             }
         }
     }
     for (nodes) |node| {
-        try self.compileOne(node);
+        try self.compileOne(vm, node);
     }
     try self.instructions.append(
-        self.allocator(),
+        vm.allocator(),
         .{ .eval = @intCast(nodes.len) },
     );
 }
 
-fn compileReturn(self: *Compiler, expr: Val) Error!void {
-    try self.compileOne(expr);
-    try self.instructions.append(self.allocator(), .{ .ret = {} });
+fn compileReturn(self: *Compiler, vm: *Vm, expr: Val) Error!void {
+    try self.compileOne(vm, expr);
+    try self.instructions.append(vm.allocator(), .{ .ret = {} });
 }
 
-fn compileDefine(self: *Compiler, name: Val, expr: Val) Error!void {
+fn compileDefine(self: *Compiler, vm: *Vm, name: Val, expr: Val) Error!void {
     const old_context = self.define_context;
     defer self.define_context = old_context;
     if (!name.is(Symbol.Interned)) {
@@ -170,7 +155,7 @@ fn compileDefine(self: *Compiler, name: Val, expr: Val) Error!void {
     }
     const interned_name = try name.to(Symbol.Interned, {});
     self.define_context = blk: {
-        if (interned_name.toSymbol(self.vm)) |name_sym| {
+        if (interned_name.toSymbol(vm)) |name_sym| {
             if (name_sym.quotes() > 1) {
                 return Error.TooManyQuotes;
             }
@@ -179,31 +164,31 @@ fn compileDefine(self: *Compiler, name: Val, expr: Val) Error!void {
             return Error.ObjectNotFound;
         }
     };
-    try self.instructions.appendSlice(self.allocator(), &.{
-        .{ .deref = self.macro_expander.@"%define" },
+    try self.instructions.appendSlice(vm.allocator(), &.{
+        .{ .deref = vm.common_symbols.@"%define" },
         .{ .push = interned_name.unquoted().toVal() },
     });
-    try self.compileOne(expr);
-    try self.instructions.append(self.allocator(), .{ .eval = 3 });
+    try self.compileOne(vm, expr);
+    try self.instructions.append(vm.allocator(), .{ .eval = 3 });
 }
 
-fn compileIf(self: *Compiler, pred: Val, true_branch: Val, false_branch: Val) Error!void {
-    try self.compileOne(pred);
+fn compileIf(self: *Compiler, vm: *Vm, pred: Val, true_branch: Val, false_branch: Val) Error!void {
+    try self.compileOne(vm, pred);
     const jump_if_idx = self.instructions.items.len;
     try self.instructions.append(
-        self.allocator(),
+        vm.allocator(),
         .{ .jump_if = 0 },
     );
     const false_branch_start = self.instructions.items.len;
-    try self.compileOne(false_branch);
+    try self.compileOne(vm, false_branch);
     const false_branch_end = self.instructions.items.len;
     const jump_idx = self.instructions.items.len;
     try self.instructions.append(
-        self.allocator(),
+        vm.allocator(),
         Instruction{ .jump = 0 },
     );
     const true_branch_start = self.instructions.items.len;
-    try self.compileOne(true_branch);
+    try self.compileOne(vm, true_branch);
     const true_branch_end = self.instructions.items.len;
     self.instructions.items[jump_if_idx] = .{
         .jump_if = @intCast(false_branch_end - false_branch_start + 1),
@@ -213,28 +198,24 @@ fn compileIf(self: *Compiler, pred: Val, true_branch: Val, false_branch: Val) Er
     };
 }
 
-fn compileFunction(self: *Compiler, args: []const Val, exprs: []const Val) !void {
-    var function_compiler = try Compiler.init(self.vm);
-    defer function_compiler.deinit();
+fn compileFunction(self: *Compiler, vm: *Vm, args: []const Val, exprs: []const Val) !void {
+    var function_compiler = Compiler{};
+    defer function_compiler.deinit(vm);
     for (args) |arg| {
-        const arg_symbol = arg.to(Symbol, self.vm) catch return Error.BadFunction;
+        const arg_symbol = arg.to(Symbol, vm) catch return Error.BadFunction;
         if (arg_symbol.isQuoted()) return Error.BadFunction;
-        try function_compiler.addLocal(arg_symbol.name());
+        try function_compiler.addLocal(vm, arg_symbol.name());
     }
-    try function_compiler.resetAndCompile(exprs);
+    try function_compiler.resetAndCompile(vm, exprs);
     const bytecode = ByteCodeFunction{
-        .name = try self.allocator().dupe(u8, self.define_context),
-        .instructions = try function_compiler.ownedInstructions(),
+        .name = try vm.allocator().dupe(u8, self.define_context),
+        .instructions = try function_compiler.ownedInstructions(vm),
         .args = @intCast(args.len),
     };
-    const bytecode_id = try self.vm.objects.put(
+    const bytecode_id = try vm.objects.put(
         ByteCodeFunction,
-        self.allocator(),
+        vm.allocator(),
         bytecode,
     );
-    try self.instructions.append(self.allocator(), .{ .push = bytecode_id.toVal() });
-}
-
-fn allocator(self: Compiler) std.mem.Allocator {
-    return self.vm.allocator();
+    try self.instructions.append(vm.allocator(), .{ .push = bytecode_id.toVal() });
 }

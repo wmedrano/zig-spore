@@ -7,10 +7,10 @@ const Vm = @import("../Vm.zig");
 const converters = @import("../converters.zig");
 
 pub fn registerAll(vm: *Vm) !void {
-    try vm.global.registerFunction(vm, NativeFunction.init("+", plusFn));
-    try vm.global.registerFunction(vm, NativeFunction.init("-", minusFn));
-    try vm.global.registerFunction(vm, NativeFunction.init("<", lessFn));
-    try vm.global.registerFunction(vm, NativeFunction.init(">", greaterFn));
+    try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "+" }, plusFn));
+    try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "-" }, minusFn));
+    try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "<" }, lessFn));
+    try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = ">" }, greaterFn));
 }
 
 fn plusImpl(vm: *Vm, vals: []const Val) Error!Val {

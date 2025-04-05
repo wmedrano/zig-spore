@@ -221,7 +221,10 @@ fn myFunc(_: *Vm) Error!Val {
 test "native function" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try vm.global.registerFunction(&vm, NativeFunction.init("my-func", myFunc));
+    try vm.global.registerFunction(
+        &vm,
+        NativeFunction.init(.{ .name = "my-func" }, myFunc),
+    );
     const val = try vm.evalStr("my-func");
     try std.testing.expectFmt(
         "(native-function my-func)",

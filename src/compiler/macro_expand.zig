@@ -9,47 +9,31 @@ const Vm = root.Vm;
 const converters = @import("../converters.zig");
 const macros = @import("../builtins/macros.zig");
 
-const MacroExpander = @This();
-
-@"%define": Symbol.Interned,
-def: Symbol.Interned,
-defun: Symbol.Interned,
-function: Symbol.Interned,
-do: Symbol.Interned,
-@"if": Symbol.Interned,
-when: Symbol.Interned,
-@"return": Symbol.Interned,
-
-/// Creates a new macro expander.
-pub fn init(vm: *Vm) !MacroExpander {
-    return try converters.symbolTable(vm, MacroExpander);
+/// Expands all the macros in `expr`.
+pub fn expand(vm: *Vm, expr: Val) Error!Val {
+    if (try maybeMacroExpand(vm, expr)) |v| return v else return expr;
 }
 
-/// Expands all the macros in ast.
-pub fn macroExpand(self: MacroExpander, vm: *Vm, expr: Val) Error!Val {
-    if (try self.maybeMacroExpand(vm, expr)) |v| return v else return expr;
-}
-
-/// Similar to `macroExpand` but returns `null` if there is no macro
+/// Similar to `expand` but returns `null` if there is no macro
 /// in `expr`.
-fn maybeMacroExpand(self: MacroExpander, vm: *Vm, expr: Val) !?Val {
+fn maybeMacroExpand(vm: *Vm, expr: Val) !?Val {
     const subexpressions = expr.to([]const Val, vm) catch return null;
     if (subexpressions.len == 0) return null;
     const leading_val = if (subexpressions.len == 0) return null else subexpressions[0];
     const leading_symbol = leading_val.to(Symbol.Interned, {}) catch return null;
-    const macro_fn: ?*const NativeFunction = if (leading_symbol.eql(self.def))
-        NativeFunction.init("def", macros.defMacro)
-    else if (leading_symbol.eql(self.defun))
-        NativeFunction.init("defun", macros.defunMacro)
-    else if (leading_symbol.eql(self.when))
-        NativeFunction.init("when", macros.whenMacro)
+    const macro_fn: ?*const NativeFunction = if (leading_symbol.eql(vm.common_symbols.def))
+        NativeFunction.init(.{.name =  "def", .is_macro = true }, macros.defMacro)
+    else if (leading_symbol.eql(vm.common_symbols.defun))
+        NativeFunction.init(.{.name =  "defun", .is_macro = true }, macros.defunMacro)
+    else if (leading_symbol.eql(vm.common_symbols.when))
+        NativeFunction.init(.{.name =  "when", .is_macro = true }, macros.whenMacro)
     else
         null;
     if (macro_fn) |f| {
         const expanded = try f.executeWith(vm, subexpressions[1..]);
-        return try self.macroExpand(vm, expanded);
+        return try expand(vm, expanded);
     }
-    var maybe_expanded_subexpressions: ?[]Val = try self.maybeMacroExpandSubexpressions(vm, subexpressions);
+    var maybe_expanded_subexpressions: ?[]Val = try maybeExpandSubexpressions(vm, subexpressions);
     defer if (maybe_expanded_subexpressions) |vals| vm.allocator().free(vals);
     if (maybe_expanded_subexpressions) |expanded_subexpressions| {
         const ret = try Val.fromOwnedList(vm, expanded_subexpressions);
@@ -61,11 +45,11 @@ fn maybeMacroExpand(self: MacroExpander, vm: *Vm, expr: Val) !?Val {
 
 /// Expands all expressions in `expr` and returns them as a newly
 /// allocated slice.
-fn maybeMacroExpandSubexpressions(self: MacroExpander, vm: *Vm, expr: []const Val) Error!?[]Val {
+fn maybeExpandSubexpressions(vm: *Vm, expr: []const Val) Error!?[]Val {
     var expandedExpr: ?[]Val = null;
     errdefer if (expandedExpr) |v| vm.allocator().free(v);
     for (expr, 0..expr.len) |sub_expr, idx| {
-        if (try self.maybeMacroExpand(vm, sub_expr)) |v| {
+        if (try maybeMacroExpand(vm, sub_expr)) |v| {
             if (expandedExpr) |_| {} else {
                 expandedExpr = try vm.allocator().dupe(Val, expr);
             }
@@ -78,39 +62,36 @@ fn maybeMacroExpandSubexpressions(self: MacroExpander, vm: *Vm, expr: []const Va
 test "no macro expansion returns null" {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    var expander = try MacroExpander.init(&vm);
     const expr = try Val.from(&vm, @as([]const Val, &.{
         try Val.from(&vm, try Symbol.fromStr("+")),
         try Val.from(&vm, 1),
         try Val.from(&vm, 2),
     }));
-    const expanded = try expander.macroExpand(&vm, expr);
+    const expanded = try expand(&vm, expr);
     try std.testing.expectFmt("(+ 1 2)", "{any}", .{expanded.formatted(&vm)});
 }
 
 test "def macro expansion" {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    var expander = try MacroExpander.init(&vm);
     const expr = try Val.from(&vm, @as([]const Val, &.{
         try Val.from(&vm, try Symbol.fromStr("def")),
         try Val.from(&vm, try Symbol.fromStr("x")),
         try Val.from(&vm, 123),
     }));
-    const expanded = try expander.macroExpand(&vm, expr);
+    const expanded = try expand(&vm, expr);
     try std.testing.expectFmt("(%define 'x 123)", "{any}", .{expanded.formatted(&vm)});
 }
 
 test "when macro expansion" {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    var expander = try MacroExpander.init(&vm);
     const expr = try Val.from(&vm, @as([]const Val, &.{
         try Val.from(&vm, try Symbol.fromStr("when")),
         try Val.from(&vm, true),
         try Val.from(&vm, 123),
     }));
-    const expanded = try expander.macroExpand(&vm, expr);
+    const expanded = try expand(&vm, expr);
     try std.testing.expectFmt("(if true (do 123))", "{any}", .{expanded.formatted(&vm)});
 
     const expr_false = try Val.from(&vm, @as([]const Val, &.{
@@ -119,14 +100,13 @@ test "when macro expansion" {
         try Val.from(&vm, 123),
         try Val.from(&vm, 456),
     }));
-    const expanded_false = try expander.macroExpand(&vm, expr_false);
+    const expanded_false = try expand(&vm, expr_false);
     try std.testing.expectFmt("(if false (do 123 456))", "{any}", .{expanded_false.formatted(&vm)});
 }
 
 test "nested macro expansion" {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    var expander = try MacroExpander.init(&vm);
     const expr = try Val.from(&vm, @as([]const Val, &.{
         try Val.from(&vm, try Symbol.fromStr("def")),
         try Val.from(&vm, try Symbol.fromStr("y")),
@@ -136,6 +116,6 @@ test "nested macro expansion" {
             try Val.from(&vm, 456),
         })),
     }));
-    const expanded = try expander.macroExpand(&vm, expr);
+    const expanded = try expand(&vm, expr);
     try std.testing.expectFmt("(%define 'y (if true (do 456)))", "{any}", .{expanded.formatted(&vm)});
 }

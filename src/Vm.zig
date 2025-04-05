@@ -4,7 +4,7 @@
 //! methods like `Module.registerValue` and `Module.registerFunction`.
 const std = @import("std");
 
-const AstBuilder = @import("compiler/AstBuilder.zig");
+const SexpBuilder = @import("compiler/SexpBuilder.zig");
 const ByteCodeFunction = Val.ByteCodeFunction;
 const Compiler = @import("compiler/Compiler.zig");
 const Error = @import("root.zig").Error;
@@ -13,6 +13,7 @@ const ObjectManager = @import("ObjectManager.zig");
 const Stack = @import("Stack.zig");
 const Symbol = Val.Symbol;
 const builtins = @import("builtins/builtins.zig");
+const converters = @import("converters.zig");
 
 pub const Module = @import("Module.zig");
 pub const Val = @import("Val.zig");
@@ -35,6 +36,21 @@ objects: ObjectManager,
 /// Contains local variables for all function calls.
 stack: Stack,
 
+/// A set of commonly used symbols.
+common_symbols: CommonSymbols,
+
+/// A set of commonly symbols.
+pub const CommonSymbols = struct {
+    @"%define": Symbol.Interned,
+    def: Symbol.Interned,
+    defun: Symbol.Interned,
+    function: Symbol.Interned,
+    do: Symbol.Interned,
+    @"if": Symbol.Interned,
+    when: Symbol.Interned,
+    @"return": Symbol.Interned,
+};
+
 /// Options for operating the virtual machine.
 pub const Options = struct {
     /// If logging should be enabled. This is useful for printing out
@@ -56,7 +72,9 @@ pub fn init(options: Options) !Vm {
         .global = .{ .name = global_name },
         .objects = objects,
         .stack = stack,
+        .common_symbols = undefined,
     };
+    vm.common_symbols = try converters.symbolTable(&vm, CommonSymbols);
     try builtins.registerAll(&vm);
     return vm;
 }
@@ -96,12 +114,13 @@ pub fn allocator(self: *Vm) std.mem.Allocator {
 /// Depending on what is inside `Val`, it may only be valid until the
 /// next `Vm.runGc` call.
 pub fn evalStr(self: *Vm, source: []const u8) !Val {
-    var ast_builder = AstBuilder.init(self, source);
-    var compiler = try Compiler.init(self);
-    defer compiler.deinit();
+    var compiler = Compiler{};
+    defer compiler.deinit(self);
+
     var ret = Val.init();
-    while (try ast_builder.next()) |ast| {
-        const instructions = try compiler.compile(ast.expr);
+    var sexp_builder = SexpBuilder.init(source);
+    while (try sexp_builder.next(self)) |sexpr| {
+        const instructions = try compiler.compile(self, sexpr);
         defer self.allocator().free(instructions);
         self.stack.reset();
         const stack_frame = Stack.Frame{

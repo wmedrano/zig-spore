@@ -14,6 +14,8 @@ const NativeFunction = @This();
 
 /// The name of the function.
 name: []const u8,
+/// True if the function is a macro.
+is_macro: bool,
 /// The function implementation that takes the `Vm` and returns a `Val`.
 function: *const fn (*Vm) Error!Val,
 
@@ -22,26 +24,43 @@ function: *const fn (*Vm) Error!Val,
 ///
 /// Note: Its usually easier to use `withArgParser` instead of
 /// extracting arguments out of `*Vm` manually.
-///
-/// # Example
-///
-/// ```zig
-/// pub fn addTwo(vm: *Vm) Error!Val {
-///     const args = vm.stack.local();
-///     if (args.len != 1) return Error.WrongArity;
-///     const arg = try args[0].to(i64, vm);
-///     return Val.from(vm, 2 + arg);
-/// }
-/// const my_func = NativeFunction.init("add-2", addTwo);
-/// ```
-pub fn init(comptime func_name: []const u8, comptime func: *const fn (*Vm) Error!Val) *const NativeFunction {
+pub fn init(
+    comptime metadata: struct { name: []const u8, is_macro: bool = false },
+    comptime func: *const fn (*Vm) Error!Val,
+) *const NativeFunction {
     const wrapped_function = struct {
         const native_function = NativeFunction{
-            .name = func_name,
+            .name = metadata.name,
+            .is_macro = metadata.is_macro,
             .function = func,
         };
     };
     return &wrapped_function.native_function;
+}
+
+fn addTwo(vm: *Vm) Error!Val {
+    const args = vm.stack.local();
+    if (args.len != 1) return Error.WrongArity;
+    const arg = try args[0].to(i64, vm);
+    return Val.from(vm, 2 + arg);
+}
+
+test init {
+    var vm = try Vm.init(.{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // fn addTwo(vm: *Vm) Error!Val {
+    //     const args = vm.stack.local();
+    //     if (args.len != 1) return Error.WrongArity;
+    //     const arg = try args[0].to(i64, vm);
+    //     return Val.from(vm, 2 + arg);
+    // }
+    const my_func = NativeFunction.init(.{ .name = "add-2" }, addTwo);
+    try vm.global.registerFunction(&vm, my_func);
+    try std.testing.expectEqual(
+        Val.from(&vm, 5),
+        try vm.evalStr("(add-2 3)"),
+    );
 }
 
 /// Create a `NativeFunction` from a Zig function. The first argument
@@ -49,19 +68,11 @@ pub fn init(comptime func_name: []const u8, comptime func: *const fn (*Vm) Error
 /// all the parameters.
 ///
 /// See `converters.parseAsArgs` for more details on argument parsing.
-///
-/// # Example
-///
-/// ```zig
-/// pub fn addTwoInts(vm: *Vm, args: struct{a: i64, b: i64}) Error!Val {
-///     return Val.from(vm, args.a + args.b);
-/// }
-/// const my_func = NativeFunction.withArgParser("add-2-ints", addTwoInts);
-/// ```
 pub fn withArgParser(comptime func_name: []const u8, func: anytype) *const NativeFunction {
     const wrapped_function = struct {
         const native_function = NativeFunction{
             .name = func_name,
+            .is_macro = false,
             .function = fnImpl,
         };
 
@@ -87,6 +98,25 @@ pub fn withArgParser(comptime func_name: []const u8, func: anytype) *const Nativ
         }
     };
     return &wrapped_function.native_function;
+}
+
+fn addTwoInts(vm: *Vm, args: struct { a: i64, b: i64 }) Error!Val {
+    return Val.from(vm, args.a + args.b);
+}
+
+test withArgParser {
+    var vm = try Vm.init(.{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+
+    // fn addTwoInts(vm: *Vm, args: struct{a: i64, b: i64}) Error!Val {
+    //     return Val.from(vm, args.a + args.b);
+    // }
+    const my_func = NativeFunction.withArgParser("add-2-ints", addTwoInts);
+    try vm.global.registerFunction(&vm, my_func);
+    try std.testing.expectEqual(
+        Val.from(&vm, 5),
+        try vm.evalStr("(add-2-ints 2 3)"),
+    );
 }
 
 /// Execute `self` on `vm` with `args`.

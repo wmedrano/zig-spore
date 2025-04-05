@@ -1,44 +1,54 @@
 const std = @import("std");
 const root = @import("../root.zig");
 
-const AstError = @import("../error.zig").AstError;
+const SexprError = @import("../error.zig").SexpError;
 const Symbol = Val.Symbol;
 const Tokenizer = @import("Tokenizer.zig");
 const Val = Vm.Val;
 const Vm = root.Vm;
 
-const AstBuilder = @This();
+const SexpBuilder = @This();
 
-pub const Ast = struct {
-    location: Tokenizer.Span,
-    expr: Val,
-};
-
-vm: *Vm,
 tokenizer: Tokenizer,
 
-pub fn init(vm: *Vm, source: []const u8) AstBuilder {
-    return AstBuilder{
-        .vm = vm,
+/// Initialize an s expression builder for `source`.
+pub fn init(source: []const u8) SexpBuilder {
+    return SexpBuilder{
         .tokenizer = Tokenizer.init(source),
     };
 }
 
-pub fn next(self: *AstBuilder) AstError!?Ast {
+/// Parse the next s-expression.
+pub fn next(self: *SexpBuilder, vm: *Vm) SexprError!?Val {
+    if (try self.nextWithLocation(vm)) |res| return res.expr;
+    return null;
+}
+
+/// Contains an expression with information over its location.
+pub const ExprWithLocation = struct {
+    /// The location of the s-expression within source.
+    location: Tokenizer.Span,
+    /// The s expression.
+    expr: Val,
+};
+
+/// Parse the next s-expression and return it along with its location
+/// information.
+pub fn nextWithLocation(self: *SexpBuilder, vm: *Vm) SexprError!?ExprWithLocation {
     const next_token: Tokenizer.Token = if (self.tokenizer.next()) |t| t else return null;
     const start = next_token.location.start;
     switch (next_token.token_type) {
         Tokenizer.TokenType.OpenParen => {
-            const expr = try Val.fromOwnedList(self.vm, try self.parseList());
-            return Ast{
+            const expr = try Val.fromOwnedList(vm, try self.parseList(vm));
+            return .{
                 .location = Tokenizer.Span{ .start = start, .end = self.tokenizer.next_idx },
                 .expr = expr,
             };
         },
         Tokenizer.TokenType.CloseParen => return error.UnexpectedCloseParen,
         Tokenizer.TokenType.Atom => {
-            const expr = try atomToVal(self.vm, next_token.text(self.tokenizer.source));
-            return Ast{
+            const expr = try atomToVal(vm, next_token.text(self.tokenizer.source));
+            return .{
                 .location = Tokenizer.Span{ .start = start, .end = self.tokenizer.next_idx },
                 .expr = expr,
             };
@@ -47,35 +57,46 @@ pub fn next(self: *AstBuilder) AstError!?Ast {
     return null;
 }
 
-pub fn parseAll(self: *AstBuilder, allocator: std.mem.Allocator) AstError![]Ast {
-    var ret = std.ArrayListUnmanaged(Ast){};
+/// Parse and return all s-expressions.
+pub fn parseAll(self: *SexpBuilder, vm: *Vm, allocator: std.mem.Allocator) SexprError![]Val {
+    var ret = std.ArrayListUnmanaged(Val){};
     defer ret.deinit(allocator);
-    while (try self.next()) |ast| {
+    while (try self.next(vm)) |val| {
+        try ret.append(allocator, val);
+    }
+    return ret.toOwnedSlice(allocator);
+}
+
+/// Parse all s-expressions and return them.
+pub fn parseAllWithLocation(self: *SexpBuilder, vm: *Vm, allocator: std.mem.Allocator) SexprError![]ExprWithLocation {
+    var ret = std.ArrayListUnmanaged(ExprWithLocation){};
+    defer ret.deinit(allocator);
+    while (try self.nextWithLocation(vm)) |ast| {
         try ret.append(allocator, ast);
     }
     return ret.toOwnedSlice(allocator);
 }
 
-fn parseList(self: *AstBuilder) AstError![]Val {
+fn parseList(self: *SexpBuilder, vm: *Vm) SexprError![]Val {
     var list = std.ArrayListUnmanaged(Val){};
-    defer list.deinit(self.vm.allocator());
+    defer list.deinit(vm.allocator());
     while (self.tokenizer.next()) |token| {
         switch (token.token_type) {
             Tokenizer.TokenType.OpenParen => {
-                const sub_expr = try Val.fromOwnedList(self.vm, try self.parseList());
-                try list.append(self.vm.allocator(), sub_expr);
+                const sub_expr = try Val.fromOwnedList(vm, try self.parseList(vm));
+                try list.append(vm.allocator(), sub_expr);
             },
-            Tokenizer.TokenType.CloseParen => return list.toOwnedSlice(self.vm.allocator()),
+            Tokenizer.TokenType.CloseParen => return list.toOwnedSlice(vm.allocator()),
             Tokenizer.TokenType.Atom => {
-                const val = try atomToVal(self.vm, token.text(self.tokenizer.source));
-                try list.append(self.vm.allocator(), val);
+                const val = try atomToVal(vm, token.text(self.tokenizer.source));
+                try list.append(vm.allocator(), val);
             },
         }
     }
-    return list.toOwnedSlice(self.vm.allocator());
+    return list.toOwnedSlice(vm.allocator());
 }
 
-fn atomToVal(vm: *Vm, atom: []const u8) AstError!Val {
+fn atomToVal(vm: *Vm, atom: []const u8) SexprError!Val {
     if (atom.len == 0) {
         return error.EmptyAtom;
     }
@@ -101,7 +122,7 @@ fn atomToVal(vm: *Vm, atom: []const u8) AstError!Val {
     return Val.from(vm, symbol);
 }
 
-fn stringAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
+fn stringAtomToVal(vm: *Vm, atom: []const u8) SexprError!Val {
     if (atom.len < 2) {
         return error.BadString;
     }
@@ -130,9 +151,9 @@ fn stringAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
     return Val.from(vm, ret.items);
 }
 
-fn keyAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
+fn keyAtomToVal(vm: *Vm, atom: []const u8) SexprError!Val {
     if (atom.len < 2) {
-        return AstError.EmptyKey;
+        return SexprError.EmptyKey;
     }
     std.debug.assert(atom[0] == ':');
     return Val.from(vm, Symbol.Key{ .name = atom[1..] });
@@ -141,11 +162,11 @@ fn keyAtomToVal(vm: *Vm, atom: []const u8) AstError!Val {
 test "empty source produces no asts" {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    var ast_builder = AstBuilder.init(&vm, "");
-    const actual = try ast_builder.parseAll(std.testing.allocator);
+    var sexp_builder = SexpBuilder.init("");
+    const actual = try sexp_builder.parseAllWithLocation(&vm, std.testing.allocator);
     defer std.testing.allocator.free(actual);
     try std.testing.expectEqualDeep(
-        &[_]Ast{},
+        &[_]ExprWithLocation{},
         actual,
     );
 }
@@ -153,11 +174,11 @@ test "empty source produces no asts" {
 test "parse atoms" {
     var vm = try Vm.init(.{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    var ast_builder = AstBuilder.init(&vm, "0 1.0 \"string\" symbol 'quoted-symbol :key true false");
-    const actual = try ast_builder.parseAll(std.testing.allocator);
+    var sexp_builder = SexpBuilder.init("0 1.0 \"string\" symbol 'quoted-symbol :key true false");
+    const actual = try sexp_builder.parseAllWithLocation(&vm, std.testing.allocator);
     defer std.testing.allocator.free(actual);
     try std.testing.expectEqualDeep(
-        &[_]Ast{
+        &[_]ExprWithLocation{
             .{
                 .location = .{ .start = 0, .end = 1 },
                 .expr = try Val.from(&vm, 0),

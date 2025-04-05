@@ -8,19 +8,17 @@ const Symbol = Val.Symbol;
 const Val = root.Val;
 const Vm = root.Vm;
 const converters = @import("../converters.zig");
-const function = @import("function.zig");
-const math = @import("math.zig");
-const string = @import("string.zig");
 
 /// Registers all built-in functions and values into the virtual
 /// machine.
 pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, NativeFunction.withArgParser("%define", defineFn));
     try vm.global.registerFunction(vm, NativeFunction.withArgParser("do", doFn));
-    try vm.global.registerFunction(vm, NativeFunction.init("list", listFn));
-    try math.registerAll(vm);
-    try string.registerAll(vm);
-    try function.registerAll(vm);
+    try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "list" }, listFn));
+    try @import("function.zig").registerAll(vm);
+    try @import("math.zig").registerAll(vm);
+    try @import("sexp.zig").registerAll(vm);
+    try @import("string.zig").registerAll(vm);
 }
 
 test registerAll {
