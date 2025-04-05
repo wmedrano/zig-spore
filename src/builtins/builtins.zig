@@ -17,7 +17,6 @@ pub fn registerAll(vm: *Vm) !void {
     try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "list" }, listFn));
     try @import("function.zig").registerAll(vm);
     try @import("math.zig").registerAll(vm);
-    try @import("sexp.zig").registerAll(vm);
     try @import("string.zig").registerAll(vm);
     try @import("macros.zig").registerAll(vm);
 }

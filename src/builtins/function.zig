@@ -2,15 +2,57 @@ const std = @import("std");
 
 const ByteCodeFunction = @import("../ByteCodeFunction.zig");
 const Error = @import("../error.zig").Error;
-const NativeFunction = @import("../NativeFunction.zig");
+const NativeFunction = Val.NativeFunction;
+const SexpBuilder = @import("../compiler/SexpBuilder.zig");
 const Symbol = @import("../Symbol.zig");
-const Val = @import("../Val.zig");
+const Val = Vm.Val;
 const Vm = @import("../Vm.zig");
 const converters = @import("../converters.zig");
 
 pub fn registerAll(vm: *Vm) !void {
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "str->sexps" }, strToSexpsFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "str->sexp" }, strToSexpFn));
     try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "function-bytecode" }, functionBytecodeFn));
     try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "apply" }, applyFn));
+}
+
+fn strToSexpsFn(vm: *Vm, args: struct { str: []const u8 }) Error!Val {
+    var sexp_builder = SexpBuilder.init(args.str);
+    const sexps = try sexp_builder.parseAll(vm, vm.allocator());
+    return Val.fromOwnedList(vm, sexps);
+}
+
+fn strToSexpFn(vm: *Vm, args: struct { str: []const u8 }) Error!Val {
+    var sexp_builder = SexpBuilder.init(args.str);
+    const sexp = if (try sexp_builder.next(vm)) |expr| expr else return Val.init();
+    if (try sexp_builder.next(vm)) |_| return Error.BadArg;
+    return sexp;
+}
+
+test "str->sexp produces s-expression" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    const actual = try vm.evalStr("(str->sexp \"   (+ 1 (foo 2 3 :key ''quoted))    \")");
+    try std.testing.expectFmt(
+        "(+ 1 (foo 2 3 :key ''quoted))",
+        "{any}",
+        .{actual.formatted(&vm)},
+    );
+}
+
+test "str->sexp on empty string produces void" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try vm.to(void, try vm.evalStr("(str->sexp \"\")"));
+}
+
+test "str->sexp with multiple sexps returns error" {
+    var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
+    defer vm.deinit();
+    try std.testing.expectError(
+        Error.BadArg,
+        vm.evalStr("(str->sexp \"(+ 1 2) (+ 3 4)\")"),
+    );
 }
 
 fn functionBytecodeFn(vm: *Vm, args: struct { func: Val }) Error!Val {
