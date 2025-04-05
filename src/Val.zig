@@ -224,8 +224,8 @@ pub fn to(self: Val, comptime T: type, vm: anytype) ToZigError!T {
         },
         .bytecode_function => |bytecode_id| switch (T) {
             ByteCodeFunction, ?ByteCodeFunction => {
-                const maybe_bytecode = vm.objects.get(ByteCodeFunction, bytecode_id);
-                if (maybe_bytecode) |b| return b.* else return ToZigError.ObjectNotFound;
+                const bytecode = try vm.objects.get(ByteCodeFunction, bytecode_id);
+                return bytecode.*;
             },
             else => return ToZigError.WrongType,
         },
@@ -316,8 +316,8 @@ fn floatToZig(comptime T: type, x: f64) ToZigError!T {
 fn stringToZig(comptime T: type, vm: anytype, id: ObjectManager.Id(String)) ToZigError!T {
     switch (T) {
         []const u8, ?[]const u8 => {
-            const maybe_string = vm.objects.get(String, id);
-            if (maybe_string) |s| return s.string else return ToZigError.ObjectNotFound;
+            const string = try vm.objects.get(String, id);
+            return string.string;
         },
         else => return ToZigError.WrongType,
     }
@@ -355,8 +355,8 @@ fn listToZig(comptime T: type, vm: anytype, id: ObjectManager.Id(List)) ToZigErr
     const VmType = @TypeOf(vm);
     switch (T) {
         []const Val, ?[]const Val => {
-            const maybe_list = vm.objects.get(List, id);
-            if (maybe_list) |l| return l.list else return ToZigError.ObjectNotFound;
+            const list = try vm.objects.get(List, id);
+            return list.list;
         },
         else => {
             if (VmType == *Vm or VmType == *const Vm) {
@@ -409,8 +409,7 @@ pub fn executeWith(self: Val, vm: *Vm, args: []const Val) Error!Val {
             return f.executeWith(vm, args);
         },
         .bytecode_function => |id| {
-            const maybe_bytecode = vm.objects.get(ByteCodeFunction, id);
-            const bytecode = if (maybe_bytecode) |bc| bc else return Error.ObjectNotFound;
+            const bytecode = try vm.objects.get(ByteCodeFunction, id);
             // Prevent garbage collection of `self`.
             try vm.stack.push(self);
             defer _ = vm.stack.pop();

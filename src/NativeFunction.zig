@@ -22,8 +22,8 @@ function: *const fn (*Vm) Error!Val,
 pub const Metadata = struct {
     /// The name of the function.
     name: []const u8,
-    /// True if the function is a macro. Macros are allowed to run at
-    /// compile time to tranform s-expressions into different forms.
+    /// True if the function is a macro. Macros are used to transform
+    /// s-expressions before compiling them.
     is_macro: bool = false,
 };
 

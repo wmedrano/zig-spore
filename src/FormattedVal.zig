@@ -61,7 +61,7 @@ pub fn format(
             try writer.print("(native-function {s})", .{f.metadata.name});
         },
         .bytecode_function => |id| {
-            const f = self.vm.objects.get(ByteCodeFunction, id) orelse {
+            const f = self.vm.objects.get(ByteCodeFunction, id) catch {
                 return writer.print("(<invalid-function>)", .{});
             };
             try writer.print("(function {s})", .{f.name});

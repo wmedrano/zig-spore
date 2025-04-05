@@ -72,7 +72,7 @@ pub const Instruction = union(InstructionTag) {
                 vm.stack.items[function_idx] = result;
             },
             .bytecode_function => |bytecode_id| {
-                const bytecode = vm.objects.get(ByteCodeFunction, bytecode_id).?;
+                const bytecode = try vm.objects.get(ByteCodeFunction, bytecode_id);
                 try bytecode.startExecute(vm, stack_start);
             },
             else => {

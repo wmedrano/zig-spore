@@ -3,6 +3,7 @@ const std = @import("std");
 const ByteCodeFunction = Val.ByteCodeFunction;
 const Error = @import("root.zig").Error;
 const List = @import("List.zig");
+const ObjectGetError = @import("error.zig").ObjectGetError;
 const ObjectManager = @This();
 const String = @import("String.zig");
 const StringInterner = @import("StringInterner.zig");
@@ -50,7 +51,7 @@ pub fn put(self: *ObjectManager, comptime T: type, allocator: std.mem.Allocator,
 
 /// Get an object with the given `Id` handle or `null` if it is not
 /// found.
-pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ?*T {
+pub fn get(self: ObjectManager, comptime T: type, id: Id(T)) ObjectGetError!*T {
     const object_storage = switch (T) {
         String => self.strings,
         List => self.lists,
@@ -139,9 +140,9 @@ fn ObjectStorage(comptime T: type) type {
             return id;
         }
 
-        pub fn get(self: Self, id: Id(T)) ?*T {
+        pub fn get(self: Self, id: Id(T)) ObjectGetError!*T {
             if (!self.tags.items[id.idx].eql(id.tag)) {
-                return null;
+                return ObjectGetError.ObjectNotFound;
             }
             return &self.objects.items[id.idx];
         }
@@ -149,7 +150,8 @@ fn ObjectStorage(comptime T: type) type {
         pub fn markReachable(self: *Self, id: Id(T), m: ObjectManager.Marker) void {
             if (self.color.items[id.idx] != m.object_manager.reachable_color) {
                 self.color.items[id.idx] = m.object_manager.reachable_color;
-                if (self.get(id)) |v| v.markChildren(m);
+                const inner = self.get(id) catch return;
+                inner.markChildren(m);
             }
         }
 

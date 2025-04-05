@@ -20,6 +20,9 @@ pub const Error = error{
 
 pub const ToZigError = error{
     WrongType,
+} || ObjectGetError;
+
+pub const ObjectGetError = error{
     /// An object (that is garbage collected) was not found. This may
     /// happen if the object is referenced after it has been garbage
     /// collected.
