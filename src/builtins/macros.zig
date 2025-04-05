@@ -7,9 +7,16 @@ const Instruction = @import("../instruction.zig").Instruction;
 const Symbol = Val.Symbol;
 const Val = Vm.Val;
 const Vm = root.Vm;
+const NativeFunction = Val.NativeFunction;
 const converters = @import("../converters.zig");
 
-pub fn defMacro(vm: *Vm) Error!Val {
+pub fn registerAll(vm: *Vm) Error!void {
+    try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "def", .is_macro = true }, defMacro));
+    try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "defun", .is_macro = true }, defunMacro));
+    try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "when", .is_macro = true }, whenMacro));
+}
+
+fn defMacro(vm: *Vm) Error!Val {
     const expr = vm.stack.local();
     if (expr.len != 2) {
         return Error.BadDefine;
@@ -22,7 +29,7 @@ pub fn defMacro(vm: *Vm) Error!Val {
     }));
 }
 
-pub fn defunMacro(vm: *Vm) Error!Val {
+fn defunMacro(vm: *Vm) Error!Val {
     const function_symbol = try (try Symbol.fromStr("function")).intern(vm);
     const expr = vm.stack.local();
     if (expr.len < 3) {
@@ -53,7 +60,7 @@ pub fn defunMacro(vm: *Vm) Error!Val {
     );
 }
 
-pub fn whenMacro(vm: *Vm) Error!Val {
+fn whenMacro(vm: *Vm) Error!Val {
     const if_symbol = try (try Symbol.fromStr("if")).intern(vm);
     const do_symbol = try (try Symbol.fromStr("do")).intern(vm);
     const expr = vm.stack.local();

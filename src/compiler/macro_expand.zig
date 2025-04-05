@@ -21,14 +21,13 @@ fn maybeMacroExpand(vm: *Vm, expr: Val) !?Val {
     if (subexpressions.len == 0) return null;
     const leading_val = if (subexpressions.len == 0) return null else subexpressions[0];
     const leading_symbol = leading_val.to(Symbol.Interned, {}) catch return null;
-    const macro_fn: ?*const NativeFunction = if (leading_symbol.eql(vm.common_symbols.def))
-        NativeFunction.init(.{.name =  "def", .is_macro = true }, macros.defMacro)
-    else if (leading_symbol.eql(vm.common_symbols.defun))
-        NativeFunction.init(.{.name =  "defun", .is_macro = true }, macros.defunMacro)
-    else if (leading_symbol.eql(vm.common_symbols.when))
-        NativeFunction.init(.{.name =  "when", .is_macro = true }, macros.whenMacro)
-    else
-        null;
+    const macro_fn: ?*const NativeFunction = blk: {
+        const maybe_val = if (vm.global.getValue(leading_symbol)) |v| v else break :blk null;
+        if (!maybe_val.is(*const NativeFunction)) break :blk null;
+        const macro_func = try maybe_val.to(*const NativeFunction, vm);
+        if (!macro_func.metadata.is_macro) break :blk null;
+        break :blk macro_func;
+    };
     if (macro_fn) |f| {
         const expanded = try f.executeWith(vm, subexpressions[1..]);
         return try expand(vm, expanded);

@@ -9,8 +9,8 @@ const Vm = @import("../Vm.zig");
 const converters = @import("../converters.zig");
 
 pub fn registerAll(vm: *Vm) !void {
-    try vm.global.registerFunction(vm, NativeFunction.withArgParser("function-bytecode", functionBytecodeFn));
-    try vm.global.registerFunction(vm, NativeFunction.withArgParser("apply", applyFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "function-bytecode" }, functionBytecodeFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "apply" }, applyFn));
 }
 
 fn functionBytecodeFn(vm: *Vm, args: struct { func: Val }) Error!Val {

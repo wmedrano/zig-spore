@@ -50,6 +50,7 @@ test "eval multiple constants returns last constant" {
 test "can define" {
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
+
     _ = try vm.evalStr("(def x 12)");
     try std.testing.expectEqual(
         12,
@@ -124,7 +125,7 @@ test "can eval custom fuction" {
     defer vm.deinit();
     try vm.global.registerFunction(
         &vm,
-        NativeFunction.withArgParser("add-2", addTwoFn),
+        NativeFunction.withArgParser(.{ .name = "add-2" }, addTwoFn),
     );
     try std.testing.expectEqual(
         10,

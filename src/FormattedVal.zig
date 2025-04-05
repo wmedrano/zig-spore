@@ -58,7 +58,7 @@ pub fn format(
             try writer.print(")", .{});
         },
         .function => |f| {
-            try writer.print("(native-function {s})", .{f.name});
+            try writer.print("(native-function {s})", .{f.metadata.name});
         },
         .bytecode_function => |id| {
             const f = self.vm.objects.get(ByteCodeFunction, id) orelse {

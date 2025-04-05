@@ -8,8 +8,8 @@ const Vm = @import("../Vm.zig");
 const converters = @import("../converters.zig");
 
 pub fn registerAll(vm: *Vm) !void {
-    try vm.global.registerFunction(vm, NativeFunction.withArgParser("str->sexps", strToSexpsFn));
-    try vm.global.registerFunction(vm, NativeFunction.withArgParser("str->sexp", strToSexpFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "str->sexps" }, strToSexpsFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "str->sexp" }, strToSexpFn));
 }
 
 pub fn strToSexpsFn(vm: *Vm, args: struct { str: []const u8 }) Error!Val {

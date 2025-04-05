@@ -12,12 +12,20 @@ const converters = @import("converters.zig");
 
 const NativeFunction = @This();
 
-/// The name of the function.
-name: []const u8,
-/// True if the function is a macro.
-is_macro: bool,
-/// The function implementation that takes the `Vm` and returns a `Val`.
+/// The metadata for the native function.
+metadata: Metadata,
+
+/// The function implementation that takes the `Vm` and returns a
+/// `Val`.
 function: *const fn (*Vm) Error!Val,
+
+pub const Metadata = struct {
+    /// The name of the function.
+    name: []const u8,
+    /// True if the function is a macro. Macros are allowed to run at
+    /// compile time to tranform s-expressions into different forms.
+    is_macro: bool = false,
+};
 
 /// Create a `NativeFunction` from a Zig function that takes a `*Vm`
 /// and returns a `Val`.
@@ -25,13 +33,12 @@ function: *const fn (*Vm) Error!Val,
 /// Note: Its usually easier to use `withArgParser` instead of
 /// extracting arguments out of `*Vm` manually.
 pub fn init(
-    comptime metadata: struct { name: []const u8, is_macro: bool = false },
+    comptime metadata: Metadata,
     comptime func: *const fn (*Vm) Error!Val,
 ) *const NativeFunction {
     const wrapped_function = struct {
         const native_function = NativeFunction{
-            .name = metadata.name,
-            .is_macro = metadata.is_macro,
+            .metadata = metadata,
             .function = func,
         };
     };
@@ -68,11 +75,10 @@ test init {
 /// all the parameters.
 ///
 /// See `converters.parseAsArgs` for more details on argument parsing.
-pub fn withArgParser(comptime func_name: []const u8, func: anytype) *const NativeFunction {
+pub fn withArgParser(comptime metadata: Metadata, func: anytype) *const NativeFunction {
     const wrapped_function = struct {
         const native_function = NativeFunction{
-            .name = func_name,
-            .is_macro = false,
+            .metadata = metadata,
             .function = fnImpl,
         };
 
@@ -111,7 +117,7 @@ test withArgParser {
     // fn addTwoInts(vm: *Vm, args: struct{a: i64, b: i64}) Error!Val {
     //     return Val.from(vm, args.a + args.b);
     // }
-    const my_func = NativeFunction.withArgParser("add-2-ints", addTwoInts);
+    const my_func = NativeFunction.withArgParser(.{ .name = "add-2-ints" }, addTwoInts);
     try vm.global.registerFunction(&vm, my_func);
     try std.testing.expectEqual(
         Val.from(&vm, 5),

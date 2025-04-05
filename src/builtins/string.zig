@@ -8,8 +8,8 @@ const Vm = @import("../Vm.zig");
 const converters = @import("../converters.zig");
 
 pub fn registerAll(vm: *Vm) !void {
-    try vm.global.registerFunction(vm, NativeFunction.withArgParser("str-len", strLenFn));
-    try vm.global.registerFunction(vm, NativeFunction.withArgParser("print", printFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "str-len" }, strLenFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "print" }, printFn));
 }
 
 pub fn strLenFn(vm: *Vm, args: struct { str: []const u8 }) Error!Val {

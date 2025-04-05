@@ -12,13 +12,14 @@ const converters = @import("../converters.zig");
 /// Registers all built-in functions and values into the virtual
 /// machine.
 pub fn registerAll(vm: *Vm) !void {
-    try vm.global.registerFunction(vm, NativeFunction.withArgParser("%define", defineFn));
-    try vm.global.registerFunction(vm, NativeFunction.withArgParser("do", doFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "%define" }, defineFn));
+    try vm.global.registerFunction(vm, NativeFunction.withArgParser(.{ .name = "do" }, doFn));
     try vm.global.registerFunction(vm, NativeFunction.init(.{ .name = "list" }, listFn));
     try @import("function.zig").registerAll(vm);
     try @import("math.zig").registerAll(vm);
     try @import("sexp.zig").registerAll(vm);
     try @import("string.zig").registerAll(vm);
+    try @import("macros.zig").registerAll(vm);
 }
 
 test registerAll {

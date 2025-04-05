@@ -24,8 +24,8 @@ pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
 /// - `vm` - The virtual machine for the module.
 /// - `func` - The `NativeFunction` to register.
 pub fn registerFunction(self: *Module, vm: *Vm, func: *const NativeFunction) !void {
-    if (func.name.len == 0 or func.name[0] == '\'') return Error.ExpectedIdentifier;
-    const interned_name = try vm.objects.string_interner.intern(vm.allocator(), func.name);
+    if (func.metadata.name.len == 0 or func.metadata.name[0] == '\'') return Error.ExpectedIdentifier;
+    const interned_name = try vm.objects.string_interner.intern(vm.allocator(), func.metadata.name);
     const val = Val{
         ._repr = .{ .function = func },
     };
@@ -46,7 +46,7 @@ test registerFunction {
     // }
     var vm = try Vm.init(Vm.Options{ .allocator = std.testing.allocator });
     defer vm.deinit();
-    try vm.global.registerFunction(&vm, NativeFunction.withArgParser("add-2", addTwo));
+    try vm.global.registerFunction(&vm, NativeFunction.withArgParser(.{ .name = "add-2" }, addTwo));
     try std.testing.expectEqual(
         10,
         try vm.to(i64, try vm.evalStr("(add-2 8)")),
@@ -66,7 +66,17 @@ pub fn registerValueByName(self: *Module, vm: *Vm, name: []const u8, value: Val)
 /// or `error.ValueAlreadyDefined` is returned.
 pub fn registerValue(self: *Module, vm: *Vm, symbol: Symbol.Interned, value: Val) !void {
     if (self.values.contains(symbol)) return Error.ValueAlreadyDefined;
-    if (symbol.quotes > 0) return Error.TooManyQuotes;
+    if (symbol.quotes > 0) {
+        if (vm.options.log) {
+            const maybe_sym = symbol.toSymbol(vm);
+            if (maybe_sym) |sym| {
+                std.log.err("Symbol {any} cannot be registered due to being quoted.", .{sym});
+            } else {
+                std.log.err("Symbol {any} cannot be registered due to being quoted.", .{symbol});
+            }
+        }
+        return Error.TooManyQuotes;
+    }
     try self.values.put(vm.allocator(), symbol, value);
 }
 
